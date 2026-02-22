@@ -40,7 +40,7 @@ async def lifespan(app: FastAPI):
 # Create FastAPI app
 app = FastAPI(
     title=settings.APP_NAME,
-    version="1.0.0",
+    version=settings.APP_VERSION,
     lifespan=lifespan,
     docs_url="/api/docs",
     redoc_url="/api/redoc",
@@ -75,8 +75,9 @@ async def moq_progress_stream(request_id: UUID):
 
     async def event_generator():
         # Subscribe to Redis pub/sub channel
+        channel = f"moq:progress:{str(request_id)}"
         pubsub = redis_client.pubsub()
-        await pubsub.subscribe(f"moq:progress:{str(request_id)}")
+        await pubsub.subscribe(channel)
         
         # Send initial value
         from app.services.moq_service import MoQService
@@ -94,9 +95,15 @@ async def moq_progress_stream(request_id: UUID):
                 if message:
                     yield {"data": message["data"]}
                 await asyncio.sleep(0.1)
-        except asyncio.CancelledError:
-            await pubsub.unsubscribe(f"moq:progress:{str(request_id)}")
-            await pubsub.close()
+        finally:
+            try:
+                await pubsub.unsubscribe(channel)
+            except Exception as exc:
+                print(f"SSE unsubscribe error: {exc}")
+            try:
+                await pubsub.close()
+            except Exception as exc:
+                print(f"SSE pubsub close error: {exc}")
     
     return EventSourceResponse(event_generator())
 
@@ -107,7 +114,7 @@ async def health_check():
     return {
         "status": "ok",
         "app": settings.APP_NAME,
-        "version": "1.0.0"
+        "version": settings.APP_VERSION
     }
 
 
@@ -115,7 +122,7 @@ async def health_check():
 async def root():
     """Root endpoint."""
     return {
-        "message": "Toplu Alışveriş Platform API",
+        "message": "İthal Toptan 2.0 API",
         "docs": "/api/docs",
         "health": "/health"
     }

@@ -1,5 +1,15 @@
 # Changelog
 
+## [v2.0.0] - 2026-02-22 - İthal Toptan 2.0 Rebrand
+
+### 🚀 Yeni Proje Kimliği
+- Varsayılan uygulama adı `İthal Toptan 2.0` olarak güncellendi.
+- `APP_VERSION` ayarı eklendi ve varsayılan değer `2.0.0` yapıldı.
+- FastAPI metadata (`version`) ve `/health` çıktısı artık konfigürasyondan versiyon okuyor.
+- 2.0 kapsamı ve yol haritası için `ITHAL_TOPTAN_2_0.md` dokümanı eklendi.
+
+---
+
 ## [v0.4.2] - 2025-02-19 - Auth UUID Critical Fix
 
 ### 🔥 KRİTİK FİX

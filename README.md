@@ -1,4 +1,9 @@
-# Toplu Alışveriş Platformu - Backend Core
+# İthal Toptan 2.0 - Backend Core
+
+## 🚀 İthal Toptan 2.0
+- Rebrand: Varsayılan uygulama adı `İthal Toptan 2.0`.
+- Versiyonlama: `APP_VERSION` ile uygulama versiyonu konfigüre edilebilir (varsayılan `2.0.0`).
+- Detaylı notlar: `ITHAL_TOPTAN_2_0.md`.
 
 ## ✅ Tamamlanan Özellikler
 

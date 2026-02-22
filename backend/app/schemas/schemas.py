@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, ConfigDict
+from pydantic import BaseModel, EmailStr, ConfigDict, Field
 from typing import Optional, List
 from datetime import datetime
 from uuid import UUID
@@ -113,7 +113,7 @@ class ProductCreate(BaseModel):
     supplier_country: str = "CN"
     alibaba_product_url: Optional[str] = None
     unit_price_usd: float
-    moq: int
+    moq: int = Field(..., ge=1)
     lead_time_days: Optional[int] = None
     shipping_cost_usd: Optional[float] = 0
     customs_rate: Optional[float] = 0.35  # %35 (Türkiye default)
@@ -161,7 +161,7 @@ class SupplierOfferCreate(BaseModel):
     supplier_country: str = "CN"
     alibaba_product_url: Optional[str] = None
     unit_price_usd: float
-    moq: int
+    moq: int = Field(..., ge=1)
     lead_time_days: Optional[int] = None
     shipping_cost_usd: Optional[float] = 0
     customs_rate: Optional[float] = 0.35  # %35
@@ -201,7 +201,7 @@ class SupplierOfferResponse(BaseModel):
 
 class WishlistAdd(BaseModel):
     request_id: UUID
-    quantity: int = 1
+    quantity: int = Field(1, ge=1)
 
 
 class WishlistResponse(BaseModel):

@@ -32,6 +32,10 @@ class EmailService:
         Returns:
             Response from Resend API
         """
+        if settings.EMAIL_PROVIDER == "fake":
+            print(f"🧪 Fake email provider: pretending to send email to {to}")
+            return {"status": "sent", "provider": "fake", "id": f"fake-{to}"}
+
         if not settings.RESEND_API_KEY:
             print(f"⚠️ RESEND_API_KEY not set. Email not sent to {to}")
             return {"status": "skipped", "reason": "no_api_key"}

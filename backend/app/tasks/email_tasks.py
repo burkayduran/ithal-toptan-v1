@@ -18,7 +18,13 @@ from app.models.models import (
 from app.core.config import settings
 
 
-@celery_app.task(name="app.tasks.email_tasks.send_moq_reached_email")
+@celery_app.task(
+    name="app.tasks.email_tasks.send_moq_reached_email",
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_jitter=True,
+    retry_kwargs={"max_retries": 5},
+)
 def send_moq_reached_email(request_id: str, deadline: str):
     """
     Send MoQ reached email to all waiting users.
@@ -92,14 +98,23 @@ async def _send_moq_reached_email_async(request_id: str, deadline: str):
             
             html = EmailTemplates.moq_reached(email_data)
 
-            send_result = EmailService.send_email(
-                to=user.email,
-                subject=f"🎉 {product.title} için sipariş hazır! 48 saat içinde ödeme yapın",
-                html=html
-            )
+            try:
+                send_result = EmailService.send_email(
+                    to=user.email,
+                    subject=f"🎉 {product.title} için sipariş hazır! 48 saat içinde ödeme yapın",
+                    html=html
+                )
+            except Exception as exc:
+                print(f"❌ Email exception for {user.email}: {exc}")
+                send_result = {"status": "error", "error": str(exc)}
 
             # Update notification status based on actual send outcome
-            notif_status = "failed" if send_result.get("status") in ("error", "skipped") else "sent"
+            if send_result.get("status") == "skipped":
+                notif_status = "skipped"
+            elif send_result.get("status") in ("error",):
+                notif_status = "failed"
+            else:
+                notif_status = "sent"
             notif_result = await db.execute(
                 select(Notification).where(
                     and_(
@@ -119,7 +134,13 @@ async def _send_moq_reached_email_async(request_id: str, deadline: str):
         print(f"✅ Sent {len(entries)} MoQ reached emails")
 
 
-@celery_app.task(name="app.tasks.email_tasks.send_payment_reminders")
+@celery_app.task(
+    name="app.tasks.email_tasks.send_payment_reminders",
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_jitter=True,
+    retry_kwargs={"max_retries": 5},
+)
 def send_payment_reminders():
     """
     Send payment reminder emails.
@@ -181,13 +202,14 @@ async def _send_payment_reminders_async():
                         Notification.user_id == user.id,
                         Notification.request_id == product.id,
                         Notification.type == "payment_reminder",
-                        Notification.status == "sent"
+                        Notification.status.in_(["pending", "sent"]),
+                        Notification.sent_at >= now - timedelta(hours=24),
                     )
                 )
             )
-            
+
             if notif_result.scalar_one_or_none():
-                continue  # Already sent reminder
+                continue  # Already attempted reminder recently
             
             hours_remaining = int((entry.payment_deadline - now).total_seconds() / 3600)
             
@@ -201,14 +223,22 @@ async def _send_payment_reminders_async():
             
             html = EmailTemplates.payment_reminder(email_data)
 
-            send_result = EmailService.send_email(
-                to=user.email,
-                subject=f"⏰ Son {hours_remaining} saat! {product.title} için ödeme yapın",
-                html=html
-            )
+            try:
+                send_result = EmailService.send_email(
+                    to=user.email,
+                    subject=f"⏰ Son {hours_remaining} saat! {product.title} için ödeme yapın",
+                    html=html
+                )
+            except Exception as exc:
+                print(f"❌ Reminder email exception for {user.email}: {exc}")
+                send_result = {"status": "error", "error": str(exc)}
 
-            # Record outcome — only mark "sent" if the API call succeeded
-            notif_status = "failed" if send_result.get("status") in ("error", "skipped") else "sent"
+            if send_result.get("status") == "skipped":
+                notif_status = "skipped"
+            elif send_result.get("status") == "error":
+                notif_status = "failed"
+            else:
+                notif_status = "sent"
             notification = Notification(
                 user_id=user.id,
                 request_id=product.id,

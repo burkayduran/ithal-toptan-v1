@@ -4,8 +4,9 @@ from typing import Optional
 
 class Settings(BaseSettings):
     # App
-    APP_NAME: str = "Toplu Alışveriş Platformu"
+    APP_NAME: str = "İthal Toptan 2.0"
     DEBUG: bool = True
+    APP_VERSION: str = "2.0.0"
     
     # Security
     SECRET_KEY: str
@@ -26,6 +27,7 @@ class Settings(BaseSettings):
     IYZICO_BASE_URL: str = "https://sandbox-api.iyzipay.com"
     
     # Email (optional for now)
+    EMAIL_PROVIDER: str = "resend"  # resend | fake
     RESEND_API_KEY: Optional[str] = None
     RESEND_FROM_EMAIL: Optional[str] = None
     
