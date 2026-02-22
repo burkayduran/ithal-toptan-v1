@@ -326,6 +326,6 @@ async def get_moq_progress(
         "request_id": str(request_id),
         "current": current,
         "target": offer.moq,
-        "percentage": round(current / offer.moq * 100, 1) if offer.moq else 0,
+        "percentage": round(current / offer.moq * 100, 1) if offer.moq > 0 else 0,
         "selling_price_try": float(offer.selling_price_try) if offer.selling_price_try else None
     }

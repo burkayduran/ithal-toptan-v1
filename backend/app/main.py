@@ -113,7 +113,9 @@ async def moq_progress_stream(request_id: UUID):
                 if message:
                     yield {"data": message["data"]}
                 await asyncio.sleep(0.1)
-        except asyncio.CancelledError:
+        finally:
+            # Always clean up the pubsub connection regardless of how the generator exits
+            # (client disconnect → CancelledError, normal exit, or any other exception).
             await pubsub.unsubscribe(f"moq:progress:{str(request_id)}")
             await pubsub.close()
     

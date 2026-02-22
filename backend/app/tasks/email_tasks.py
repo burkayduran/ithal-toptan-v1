@@ -85,7 +85,7 @@ async def _send_moq_reached_email_async(request_id: str, deadline: str):
                 "unit_price": float(offer.selling_price_try) if offer.selling_price_try else 0,
                 "total_price": float(offer.selling_price_try) * entry.quantity if offer.selling_price_try else 0,
                 "moq": offer.moq,
-                "deadline": datetime.fromisoformat(deadline).strftime("%d.%m.%Y %H:%M"),
+                "deadline": datetime.fromisoformat(deadline).strftime("%d.%m.%Y %H:%M") if deadline else "N/A",
                 "lead_time_days": offer.lead_time_days or 30,
                 "payment_url": f"{settings.FRONTEND_URL}/payment/{entry.id}"
             }

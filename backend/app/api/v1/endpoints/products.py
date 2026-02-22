@@ -142,9 +142,9 @@ async def list_products(
             "selling_price_try": float(offer.selling_price_try) if offer and offer.selling_price_try else None,
             "lead_time_days": offer.lead_time_days if offer else None,
             "current_wishlist_count": wishlist_count,
-            "moq_fill_percentage": round(wishlist_count / offer.moq * 100, 1) if offer and offer.moq else None,
+            "moq_fill_percentage": round(wishlist_count / offer.moq * 100, 1) if offer and offer.moq > 0 else None,
         }
-        
+
         enriched_products.append(ProductResponse(**product_dict))
     
     return enriched_products
@@ -198,7 +198,7 @@ async def get_product(product_id: UUID, db: AsyncSession = Depends(get_db)):
         "selling_price_try": float(offer.selling_price_try) if offer and offer.selling_price_try else None,
         "lead_time_days": offer.lead_time_days if offer else None,
         "current_wishlist_count": wishlist_count,
-        "moq_fill_percentage": round(wishlist_count / offer.moq * 100, 1) if offer and offer.moq else None,
+        "moq_fill_percentage": round(wishlist_count / offer.moq * 100, 1) if offer and offer.moq > 0 else None,
     }
-    
+
     return ProductResponse(**product_dict)
