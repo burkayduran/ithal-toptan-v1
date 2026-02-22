@@ -1,41 +1,56 @@
-from contextlib import asynccontextmanager
 import logging
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+import logging.config
+from contextlib import asynccontextmanager
 from uuid import UUID
 
-from app.core.config import settings
-from app.db.session import engine, Base
-from app.api.v1.endpoints import auth, products, wishlist
-from app.api.admin import admin
 import redis.asyncio as aioredis
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 from sse_starlette.sse import EventSourceResponse
 import asyncio
 
+from app.core.config import settings
+from app.core.limiter import limiter
+from app.db.session import engine
+from app.api.v1.endpoints import auth, products, wishlist
+from app.api.admin import admin
+
+# ── Logging setup ─────────────────────────────────────────────────────────────
+
+_LOG_FORMAT = (
+    "%(asctime)s %(levelname)s [%(name)s] %(message)s"
+    if settings.DEBUG
+    else "%(levelname)s [%(name)s] %(message)s"
+)
+logging.basicConfig(level=logging.DEBUG if settings.DEBUG else logging.INFO, format=_LOG_FORMAT)
 logger = logging.getLogger(__name__)
 
-# Global Redis connection for SSE.
-# STRICT MODE: redis_client is always set after startup or the process has exited.
+# ── Sentry (optional) ─────────────────────────────────────────────────────────
+
+if settings.SENTRY_DSN:
+    import sentry_sdk  # noqa: PLC0415
+    sentry_sdk.init(
+        dsn=settings.SENTRY_DSN,
+        traces_sample_rate=0.2,
+        environment="development" if settings.DEBUG else "production",
+    )
+    logger.info("Sentry initialised")
+
+# ── Global Redis client (strict startup mode) ─────────────────────────────────
+
 redis_client: aioredis.Redis
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Lifespan context manager for startup/shutdown events.
-
-    Strict Redis mode: if Redis is unreachable at startup the application
-    raises immediately, preventing a partially-functional deployment.
-    """
+    """Startup / shutdown lifecycle."""
     global redis_client
 
-    # Startup: Create DB tables
-    logger.info("Connecting to database and creating tables...")
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    logger.info("Database ready.")
-
-    # Startup: Connect to Redis — fail fast if unreachable
-    logger.info("Connecting to Redis at %s ...", settings.REDIS_URL)
+    # Redis – fail fast if unreachable
+    logger.info("Connecting to Redis at %s …", settings.REDIS_URL)
     redis_client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
     try:
         await redis_client.ping()
@@ -49,64 +64,84 @@ async def lifespan(app: FastAPI):
         raise SystemExit(1) from exc
     logger.info("Redis ready.")
 
+    # DB – verify connectivity (schema is managed by Alembic migrations)
+    logger.info("Verifying database connectivity…")
+    try:
+        async with engine.connect() as conn:
+            from sqlalchemy import text
+            await conn.execute(text("SELECT 1"))
+        logger.info("Database ready.")
+    except Exception as exc:
+        logger.critical("Database is unreachable at startup: %s", exc)
+        raise SystemExit(1) from exc
+
     yield
 
     # Shutdown
-    logger.info("Shutting down — closing Redis and DB connections.")
+    logger.info("Shutting down – closing Redis and DB connections.")
     await redis_client.aclose()
     await engine.dispose()
 
 
-# Create FastAPI app
+# ── FastAPI app ────────────────────────────────────────────────────────────────
+
 app = FastAPI(
     title=settings.APP_NAME,
     version="1.0.0",
     lifespan=lifespan,
     docs_url="/api/docs",
     redoc_url="/api/redoc",
-    openapi_url="/api/openapi.json"
+    openapi_url="/api/openapi.json",
 )
 
-# CORS middleware
+# ── Rate limiter ───────────────────────────────────────────────────────────────
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
+
+# ── CORS ───────────────────────────────────────────────────────────────────────
+
+_allowed_origins = [settings.FRONTEND_URL]
+if settings.EXTRA_CORS_ORIGINS:
+    _allowed_origins += [o.strip() for o in settings.EXTRA_CORS_ORIGINS.split(",") if o.strip()]
+# Allow localhost only in DEBUG / development mode
+if settings.DEBUG:
+    _allowed_origins += ["http://localhost:3000", "http://127.0.0.1:3000"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.FRONTEND_URL, "http://localhost:3000"],
+    allow_origins=_allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept"],
 )
 
-# Include routers
-app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
+# ── Routers ────────────────────────────────────────────────────────────────────
+
+app.include_router(auth.router,     prefix="/api/v1/auth",     tags=["Authentication"])
 app.include_router(products.router, prefix="/api/v1/products", tags=["Products"])
 app.include_router(wishlist.router, prefix="/api/v1/wishlist", tags=["Wishlist"])
-app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
+app.include_router(admin.router,    prefix="/api/admin",       tags=["Admin"])
 
 
-# SSE endpoint for real-time MoQ progress
+# ── SSE endpoint ───────────────────────────────────────────────────────────────
+
 @app.get("/api/v1/moq/progress/{request_id}")
 async def moq_progress_stream(request_id: UUID):
-    """
-    Server-Sent Events endpoint for real-time MoQ progress updates.
-    Frontend can use EventSource to listen for updates.
-
-    Redis is guaranteed to be available (strict startup mode).
-    """
+    """Server-Sent Events for real-time MoQ progress updates."""
     async def event_generator():
-        # Subscribe to Redis pub/sub channel
         pubsub = redis_client.pubsub()
-        await pubsub.subscribe(f"moq:progress:{str(request_id)}")
-        
-        # Send initial value
+        await pubsub.subscribe(f"moq:progress:{request_id}")
+
         from app.services.moq_service import MoQService
         from app.db.session import AsyncSessionLocal
-        
+
         async with AsyncSessionLocal() as db:
             moq_service = MoQService(db, redis_client)
             current_count = await moq_service.get_current_count(request_id)
             yield {"data": str(current_count)}
-        
-        # Listen for updates
+
         try:
             while True:
                 message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=30)
@@ -114,29 +149,52 @@ async def moq_progress_stream(request_id: UUID):
                     yield {"data": message["data"]}
                 await asyncio.sleep(0.1)
         finally:
-            # Always clean up the pubsub connection regardless of how the generator exits
-            # (client disconnect → CancelledError, normal exit, or any other exception).
-            await pubsub.unsubscribe(f"moq:progress:{str(request_id)}")
+            await pubsub.unsubscribe(f"moq:progress:{request_id}")
             await pubsub.close()
-    
+
     return EventSourceResponse(event_generator())
 
 
-@app.get("/health")
+# ── Health check ───────────────────────────────────────────────────────────────
+
+@app.get("/health", tags=["Health"])
 async def health_check():
-    """Health check endpoint."""
-    return {
-        "status": "ok",
-        "app": settings.APP_NAME,
-        "version": "1.0.0"
-    }
+    """Deep health check: verifies DB and Redis connectivity."""
+    from sqlalchemy import text
+
+    health: dict = {"status": "ok", "app": settings.APP_NAME, "version": "1.0.0"}
+    errors: list = []
+
+    # DB check
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+        health["db"] = "ok"
+    except Exception as exc:
+        health["db"] = "error"
+        errors.append(f"db: {exc}")
+
+    # Redis check
+    try:
+        await redis_client.ping()
+        health["redis"] = "ok"
+    except Exception as exc:
+        health["redis"] = "error"
+        errors.append(f"redis: {exc}")
+
+    if errors:
+        health["status"] = "degraded"
+        health["errors"] = errors
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=503, content=health)
+
+    return health
 
 
-@app.get("/")
+@app.get("/", tags=["Root"])
 async def root():
-    """Root endpoint."""
     return {
         "message": "Toplu Alışveriş Platform API",
         "docs": "/api/docs",
-        "health": "/health"
+        "health": "/health",
     }

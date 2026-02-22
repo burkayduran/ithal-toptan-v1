@@ -1,8 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
+from app.core.limiter import limiter
+from app.core.config import settings
 from app.db.session import get_db
 from app.models.models import User
 from app.schemas.schemas import UserCreate, UserLogin, UserResponse, Token, UserUpdate
@@ -10,14 +12,15 @@ from app.core.auth import (
     get_password_hash,
     verify_password,
     create_access_token,
-    get_current_active_user
+    get_current_active_user,
 )
 
 router = APIRouter()
 
 
 @router.post("/register", response_model=Token, status_code=status.HTTP_201_CREATED)
-async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
+@limiter.limit(settings.RATE_LIMIT_AUTH)
+async def register(request: Request, user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     """Register a new user."""
     # Check if email already exists
     result = await db.execute(select(User).where(User.email == user_data.email))
@@ -53,7 +56,8 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/login", response_model=Token)
-async def login(credentials: UserLogin, db: AsyncSession = Depends(get_db)):
+@limiter.limit(settings.RATE_LIMIT_AUTH)
+async def login(request: Request, credentials: UserLogin, db: AsyncSession = Depends(get_db)):
     """Login user."""
     # Find user by email
     result = await db.execute(select(User).where(User.email == credentials.email))

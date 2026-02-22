@@ -1,84 +1,75 @@
 """
-Email Service using Resend API
+Email Service
+
+Supports two providers controlled by the EMAIL_PROVIDER env variable:
+  - "resend"  (default) – sends via Resend API; requires RESEND_API_KEY.
+  - "fake"              – no network call; always returns a controlled
+                          success response (useful for tests / CI).
 """
-from typing import List, Dict, Optional
-import resend
+import logging
+from typing import Dict, List, Optional
+
 from app.core.config import settings
 
-# Initialize Resend
-if settings.RESEND_API_KEY:
-    resend.api_key = settings.RESEND_API_KEY
+logger = logging.getLogger(__name__)
 
 
 class EmailService:
-    """Handle email sending with Resend."""
-    
+    """Handle email sending with pluggable providers."""
+
     @staticmethod
     def send_email(
         to: str,
         subject: str,
         html: str,
-        from_email: Optional[str] = None
+        from_email: Optional[str] = None,
     ) -> Dict:
         """
-        Send an email using Resend.
-        
-        Args:
-            to: Recipient email
-            subject: Email subject
-            html: HTML body
-            from_email: Sender email (defaults to RESEND_FROM_EMAIL)
-        
-        Returns:
-            Response from Resend API
+        Send a single email.
+
+        Returns a dict that always contains a ``status`` key:
+          - "fake"    – EMAIL_PROVIDER=fake; no real send
+          - "sent"    – successfully delivered to provider
+          - "skipped" – no API key configured
+          - "error"   – provider returned an error
         """
+        provider = settings.EMAIL_PROVIDER.lower()
+
+        # ── Fake provider (test / CI mode) ────────────────────────────────────
+        if provider == "fake":
+            logger.info("FAKE EMAIL to=%s subject=%s", to, subject)
+            return {"status": "fake", "to": to, "subject": subject}
+
+        # ── Resend provider ───────────────────────────────────────────────────
         if not settings.RESEND_API_KEY:
-            print(f"⚠️ RESEND_API_KEY not set. Email not sent to {to}")
+            logger.warning("RESEND_API_KEY not set – email to %s skipped", to)
             return {"status": "skipped", "reason": "no_api_key"}
-        
+
         try:
+            import resend  # noqa: PLC0415
+            resend.api_key = settings.RESEND_API_KEY
             params = {
                 "from": from_email or settings.RESEND_FROM_EMAIL,
                 "to": [to],
                 "subject": subject,
                 "html": html,
             }
-            
             response = resend.Emails.send(params)
-            print(f"✅ Email sent to {to}: {response}")
+            logger.info("Email sent to %s: %s", to, response)
             return response
-        
-        except Exception as e:
-            print(f"❌ Email send failed to {to}: {str(e)}")
-            return {"status": "error", "error": str(e)}
-    
+        except Exception as exc:
+            logger.error("Email send failed to %s: %s", to, exc)
+            return {"status": "error", "error": str(exc)}
+
     @staticmethod
     def send_bulk_email(
         recipients: List[str],
         subject: str,
         html: str,
-        from_email: Optional[str] = None
+        from_email: Optional[str] = None,
     ) -> List[Dict]:
-        """
-        Send emails to multiple recipients.
-        
-        Args:
-            recipients: List of recipient emails
-            subject: Email subject
-            html: HTML body
-            from_email: Sender email
-        
-        Returns:
-            List of responses
-        """
-        results = []
-        for recipient in recipients:
-            result = EmailService.send_email(
-                to=recipient,
-                subject=subject,
-                html=html,
-                from_email=from_email
-            )
-            results.append({"email": recipient, "result": result})
-        
-        return results
+        """Send the same email to multiple recipients."""
+        return [
+            {"email": r, "result": EmailService.send_email(r, subject, html, from_email)}
+            for r in recipients
+        ]

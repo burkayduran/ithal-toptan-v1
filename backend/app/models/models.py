@@ -214,14 +214,18 @@ class Notification(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
     request_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("product_requests.id"))
-    
+
     # Type: moq_reached, payment_reminder, order_confirmed, shipped, delivered
     type: Mapped[str] = mapped_column(String(50), nullable=False)
     channel: Mapped[str] = mapped_column(String(20), default="email")  # email, sms, push
     subject: Mapped[Optional[str]] = mapped_column(String(255))
-    
+
     # Status: pending, sent, delivered, opened, clicked, failed
     status: Mapped[str] = mapped_column(String(20), default="pending")
-    
+
     sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     opened_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "request_id", "type", name="uq_notification_user_request_type"),
+    )

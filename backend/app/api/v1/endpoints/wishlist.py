@@ -1,7 +1,7 @@
 """
 Wishlist endpoints - Add/remove from wishlist, MoQ tracking
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -9,6 +9,7 @@ from typing import List
 from uuid import UUID
 import redis.asyncio as aioredis
 
+from app.core.limiter import limiter
 from app.db.session import get_db
 from app.models.models import User, ProductRequest, WishlistEntry, SupplierOffer, Notification
 from app.schemas.schemas import WishlistAdd, WishlistResponse
@@ -29,11 +30,13 @@ async def get_redis() -> aioredis.Redis:
 
 
 @router.post("/add")
+@limiter.limit(settings.RATE_LIMIT_WISHLIST_ADD)
 async def add_to_wishlist(
+    request: Request,
     data: WishlistAdd,
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
-    redis: aioredis.Redis = Depends(get_redis)
+    redis: aioredis.Redis = Depends(get_redis),
 ):
     """Add product to wishlist."""
     # Check if product exists and is active

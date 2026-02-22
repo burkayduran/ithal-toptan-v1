@@ -33,5 +33,8 @@ httpx==0.27.2
 # SSE (Server-Sent Events)
 sse-starlette==2.1.3
 
+# Rate limiting
+slowapi==0.1.9
+
 # Monitoring
 sentry-sdk==2.17.0
