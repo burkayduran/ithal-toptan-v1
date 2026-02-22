@@ -76,11 +76,16 @@ async def add_to_wishlist(
         # Update quantity
         old_quantity = existing.quantity
         existing.quantity = data.quantity
-        # Sync status/deadline if product transitioned to moq_reached since they joined
+
+        # Sync status/deadline if product transitioned to moq_reached since they joined.
+        # Track whether notified_at transitions null→now so we send the email exactly once.
+        just_notified = False
         if product.status == "moq_reached" and existing.status == "waiting":
             existing.status = "notified"
             existing.notified_at = initial_notified_at
             existing.payment_deadline = initial_deadline
+            just_notified = True
+
         await db.commit()
 
         # Update Redis counter
@@ -90,6 +95,34 @@ async def add_to_wishlist(
                 await moq_service.increment(data.request_id, quantity_diff)
             else:
                 await moq_service.decrement(data.request_id, abs(quantity_diff))
+
+        # Only enqueue email if this request is the one that flipped the status.
+        # Guards against double-emails from concurrent retries or double-clicks.
+        if just_notified:
+            notif_check = await db.execute(
+                select(Notification).where(
+                    Notification.user_id == current_user.id,
+                    Notification.request_id == data.request_id,
+                    Notification.type == "moq_reached",
+                    Notification.status.in_(["pending", "sent"]),
+                )
+            )
+            if notif_check.scalar_one_or_none() is None:
+                notification = Notification(
+                    user_id=current_user.id,
+                    request_id=data.request_id,
+                    type="moq_reached",
+                    channel="email",
+                    subject="Sipariş hazır! 48 saat içinde ödeme yapın",
+                    status="pending",
+                )
+                db.add(notification)
+                await db.commit()
+                from app.tasks.email_tasks import send_moq_reached_email
+                send_moq_reached_email.delay(
+                    str(data.request_id),
+                    initial_deadline.isoformat() if initial_deadline else "",
+                )
 
         message = "Wishlist updated"
     else:
@@ -105,31 +138,71 @@ async def add_to_wishlist(
         db.add(entry)
         await db.flush()  # get entry.id before commit
 
-        # If immediately notified, create a notification record and schedule email
+        # If immediately notified, create a notification record only if one doesn't
+        # already exist (guards against retries / concurrent requests).
+        should_send_email = False
         if initial_status == "notified":
-            notification = Notification(
-                user_id=current_user.id,
-                request_id=data.request_id,
-                type="moq_reached",
-                channel="email",
-                subject="Sipariş hazır! 48 saat içinde ödeme yapın",
-                status="pending",
+            notif_check = await db.execute(
+                select(Notification).where(
+                    Notification.user_id == current_user.id,
+                    Notification.request_id == data.request_id,
+                    Notification.type == "moq_reached",
+                    Notification.status.in_(["pending", "sent"]),
+                )
             )
-            db.add(notification)
+            if notif_check.scalar_one_or_none() is None:
+                notification = Notification(
+                    user_id=current_user.id,
+                    request_id=data.request_id,
+                    type="moq_reached",
+                    channel="email",
+                    subject="Sipariş hazır! 48 saat içinde ödeme yapın",
+                    status="pending",
+                )
+                db.add(notification)
+                should_send_email = True
 
         try:
             await db.commit()
         except IntegrityError:
+            # Concurrent request already created this row — roll back our attempt
+            # and treat the existing row as the target (idempotent "set quantity").
             await db.rollback()
-            raise HTTPException(
-                status_code=409,
-                detail="Already in wishlist"
+
+            collision_result = await db.execute(
+                select(WishlistEntry).where(
+                    WishlistEntry.request_id == data.request_id,
+                    WishlistEntry.user_id == current_user.id,
+                )
             )
+            existing = collision_result.scalar_one_or_none()
+            if existing is None:
+                # Extremely unlikely — give up gracefully
+                raise HTTPException(status_code=500, detail="Wishlist state error, please retry")
+
+            old_quantity = existing.quantity
+            existing.quantity = data.quantity
+            if product.status == "moq_reached" and existing.status == "waiting":
+                existing.status = "notified"
+                existing.notified_at = initial_notified_at
+                existing.payment_deadline = initial_deadline
+            await db.commit()
+
+            quantity_diff = data.quantity - old_quantity
+            if quantity_diff > 0:
+                await moq_service.increment(data.request_id, quantity_diff)
+            elif quantity_diff < 0:
+                await moq_service.decrement(data.request_id, abs(quantity_diff))
+
+            if product.status == "active":
+                await moq_service.check_and_trigger(data.request_id)
+
+            return {"message": "Wishlist updated"}
 
         # Increment Redis counter
         await moq_service.increment(data.request_id, data.quantity)
 
-        if initial_status == "notified":
+        if should_send_email:
             from app.tasks.email_tasks import send_moq_reached_email
             send_moq_reached_email.delay(
                 str(data.request_id),

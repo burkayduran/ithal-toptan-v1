@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException
+import logging
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from uuid import UUID
 
@@ -11,29 +12,48 @@ import redis.asyncio as aioredis
 from sse_starlette.sse import EventSourceResponse
 import asyncio
 
+logger = logging.getLogger(__name__)
 
-# Global Redis connection for SSE
-redis_client: aioredis.Redis = None
+# Global Redis connection for SSE.
+# STRICT MODE: redis_client is always set after startup or the process has exited.
+redis_client: aioredis.Redis
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Lifespan context manager for startup/shutdown events."""
+    """Lifespan context manager for startup/shutdown events.
+
+    Strict Redis mode: if Redis is unreachable at startup the application
+    raises immediately, preventing a partially-functional deployment.
+    """
     global redis_client
-    
-    # Startup: Create tables
+
+    # Startup: Create DB tables
+    logger.info("Connecting to database and creating tables...")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    
-    # Connect to Redis and verify the connection is live
+    logger.info("Database ready.")
+
+    # Startup: Connect to Redis — fail fast if unreachable
+    logger.info("Connecting to Redis at %s ...", settings.REDIS_URL)
     redis_client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
-    await redis_client.ping()
+    try:
+        await redis_client.ping()
+    except Exception as exc:
+        logger.critical(
+            "Redis is unreachable at startup (%s). "
+            "The application requires Redis for MoQ counters and real-time updates. "
+            "Fix the connection and restart.",
+            exc,
+        )
+        raise SystemExit(1) from exc
+    logger.info("Redis ready.")
 
     yield
-    
+
     # Shutdown
-    if redis_client:
-        await redis_client.aclose()
+    logger.info("Shutting down — closing Redis and DB connections.")
+    await redis_client.aclose()
     await engine.dispose()
 
 
@@ -69,10 +89,9 @@ async def moq_progress_stream(request_id: UUID):
     """
     Server-Sent Events endpoint for real-time MoQ progress updates.
     Frontend can use EventSource to listen for updates.
-    """
-    if redis_client is None:
-        raise HTTPException(status_code=503, detail="Real-time service unavailable")
 
+    Redis is guaranteed to be available (strict startup mode).
+    """
     async def event_generator():
         # Subscribe to Redis pub/sub channel
         pubsub = redis_client.pubsub()
