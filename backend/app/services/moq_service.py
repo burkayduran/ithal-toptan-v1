@@ -2,6 +2,7 @@
 MoQ (Minimum Order Quantity) Service
 Redis-based atomic counter and trigger logic
 """
+import logging
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from uuid import UUID
@@ -15,6 +16,8 @@ from app.models.models import (
     WishlistEntry,
     Notification
 )
+
+logger = logging.getLogger(__name__)
 
 
 class MoQService:
@@ -39,7 +42,7 @@ class MoQService:
             select(func.coalesce(func.sum(WishlistEntry.quantity), 0))
             .where(
                 WishlistEntry.request_id == request_id,
-                WishlistEntry.status.in_(["waiting", "notified"])
+                WishlistEntry.status.in_(["waiting", "notified", "paid"])
             )
         )
         db_count = result.scalar() or 0
@@ -93,7 +96,7 @@ return val
             select(func.coalesce(func.sum(WishlistEntry.quantity), 0))
             .where(
                 WishlistEntry.request_id == request_id,
-                WishlistEntry.status.in_(["waiting", "notified"])
+                WishlistEntry.status.in_(["waiting", "notified", "paid"])
             )
         )
         db_count = int(result.scalar() or 0)
@@ -126,12 +129,33 @@ return val
 
         threshold_met = current_count >= offer.moq
         if not threshold_met:
+            logger.info(
+                "check_and_trigger: threshold not met",
+                extra={
+                    "request_id": str(request_id),
+                    "current_count": current_count,
+                    "offer_moq": offer.moq,
+                    "threshold_met": False,
+                    "transition_performed": False,
+                },
+            )
             return {"threshold_met": False, "transition_performed": False, "status_after": product.status}
 
         transition_performed = await self.trigger_payment_phase(request_id, offer)
 
         refreshed = await self.db.execute(select(ProductRequest.status).where(ProductRequest.id == request_id))
         status_after = refreshed.scalar_one_or_none() or product.status
+        logger.info(
+            "check_and_trigger: threshold met",
+            extra={
+                "request_id": str(request_id),
+                "current_count": current_count,
+                "offer_moq": offer.moq,
+                "threshold_met": True,
+                "transition_performed": transition_performed,
+                "status_after": status_after,
+            },
+        )
         return {"threshold_met": True, "transition_performed": transition_performed, "status_after": status_after}
 
     async def trigger_payment_phase(self, request_id: UUID, offer: SupplierOffer) -> bool:

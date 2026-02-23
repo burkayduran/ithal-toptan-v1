@@ -1,6 +1,7 @@
 """
 Wishlist endpoints - Add/remove from wishlist, MoQ tracking
 """
+import logging
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -16,6 +17,8 @@ from app.schemas.schemas import WishlistAdd, WishlistResponse
 from app.core.auth import get_current_active_user
 from app.core.config import settings
 from app.services.moq_service import MoQService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -93,6 +96,16 @@ async def add_to_wishlist(
             initial_deadline = None
             initial_notified_at = None
 
+        # Pre-compute notification intent before the write using the pre-fetched state.
+        # Notify only when the product is already in moq_reached and this is either a new
+        # entry or an existing one that was still "waiting" (about to be promoted to notified).
+        should_notify = product.status == "moq_reached" and (
+            existing is None or existing.status == "waiting"
+        )
+
+        # UPSERT: single atomic write covering both insert and update paths.
+        # On conflict, overwrite quantity AND status/deadline/notified_at so the row
+        # always reflects the current product state without a separate UPDATE round-trip.
         upsert_stmt = (
             insert(WishlistEntry)
             .values(
@@ -105,38 +118,38 @@ async def add_to_wishlist(
             )
             .on_conflict_do_update(
                 index_elements=[WishlistEntry.request_id, WishlistEntry.user_id],
-                set_={"quantity": data.quantity},
+                set_={
+                    "quantity": data.quantity,
+                    "status": initial_status,
+                    "payment_deadline": initial_deadline,
+                    "notified_at": initial_notified_at,
+                },
             )
         )
 
-        should_notify = False
         try:
             await db.execute(upsert_stmt)
-
-            if product.status == "moq_reached":
-                transition_result = await db.execute(
-                    WishlistEntry.__table__.update()
-                    .where(
-                        WishlistEntry.request_id == data.request_id,
-                        WishlistEntry.user_id == current_user.id,
-                        WishlistEntry.status == "waiting",
-                    )
-                    .values(
-                        status="notified",
-                        notified_at=initial_notified_at,
-                        payment_deadline=initial_deadline,
-                    )
-                )
-                should_notify = transition_result.rowcount > 0 or existing is None
-                if should_notify:
-                    await _create_moq_notification_if_missing(db, current_user.id, data.request_id)
-
+            if should_notify:
+                await _create_moq_notification_if_missing(db, current_user.id, data.request_id)
             await db.commit()
         except IntegrityError:
             await db.rollback()
+            should_notify = False
 
         moq_service = MoQService(db, redis)
-        await moq_service.sync_counter_from_db(data.request_id)
+        db_total = await moq_service.sync_counter_from_db(data.request_id)
+        redis_value_raw = await redis.get(moq_service._get_counter_key(data.request_id))
+        redis_value = int(redis_value_raw) if redis_value_raw is not None else db_total
+        logger.info(
+            "wishlist_write",
+            extra={
+                "request_id": str(data.request_id),
+                "user_id": str(current_user.id),
+                "new_qty": data.quantity,
+                "db_total": db_total,
+                "redis_value": redis_value,
+            },
+        )
 
         if should_notify:
             from app.tasks.email_tasks import send_moq_reached_email
