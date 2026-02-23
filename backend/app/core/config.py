@@ -7,6 +7,10 @@ class Settings(BaseSettings):
     APP_NAME: str = "İthal Toptan 2.0"
     DEBUG: bool = True
     APP_VERSION: str = "2.0.0"
+    # Environment: "development" | "staging" | "production"
+    # create_all() only runs in development/local; staging and production must
+    # use Alembic migrations (`alembic upgrade head`).
+    ENVIRONMENT: str = "development"
     
     # Security
     SECRET_KEY: str

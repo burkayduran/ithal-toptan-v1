@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException
+import logging
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from uuid import UUID
 
@@ -11,8 +12,9 @@ import redis.asyncio as aioredis
 from sse_starlette.sse import EventSourceResponse
 import asyncio
 
+logger = logging.getLogger(__name__)
 
-# Global Redis connection for SSE
+# Global Redis connection for SSE and shared use
 redis_client: aioredis.Redis = None
 
 
@@ -20,21 +22,40 @@ redis_client: aioredis.Redis = None
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup/shutdown events."""
     global redis_client
-    
-    # Startup: Create tables
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    
-    # Connect to Redis and verify the connection is live
+
+    # create_all() is only allowed in development/local to avoid schema drift
+    # with Alembic.  In staging/production, run `alembic upgrade head` instead.
+    _dev_envs = ("development", "local")
+    if settings.ENVIRONMENT in _dev_envs:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info(
+            "create_all() ran (ENVIRONMENT=%s). "
+            "Tables created/verified via SQLAlchemy metadata.",
+            settings.ENVIRONMENT,
+        )
+    else:
+        logger.info(
+            "create_all() SKIPPED (ENVIRONMENT=%s). "
+            "Schema must be managed via: alembic upgrade head",
+            settings.ENVIRONMENT,
+        )
+
+    # Create one shared Redis client for the lifetime of the process.
+    # All endpoints and services borrow this client; it is never closed
+    # per-request.
     redis_client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
     await redis_client.ping()
+    app.state.redis = redis_client
+    logger.info("Redis connected: %s", settings.REDIS_URL)
 
     yield
-    
+
     # Shutdown
     if redis_client:
         await redis_client.aclose()
     await engine.dispose()
+    logger.info("Redis and DB engine closed.")
 
 
 # Create FastAPI app
@@ -65,29 +86,30 @@ app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
 
 # SSE endpoint for real-time MoQ progress
 @app.get("/api/v1/moq/progress/{request_id}")
-async def moq_progress_stream(request_id: UUID):
+async def moq_progress_stream(request: Request, request_id: UUID):
     """
     Server-Sent Events endpoint for real-time MoQ progress updates.
     Frontend can use EventSource to listen for updates.
     """
-    if redis_client is None:
+    shared_redis: aioredis.Redis = request.app.state.redis
+    if shared_redis is None:
         raise HTTPException(status_code=503, detail="Real-time service unavailable")
 
     async def event_generator():
         # Subscribe to Redis pub/sub channel
         channel = f"moq:progress:{str(request_id)}"
-        pubsub = redis_client.pubsub()
+        pubsub = shared_redis.pubsub()
         await pubsub.subscribe(channel)
-        
+
         # Send initial value
         from app.services.moq_service import MoQService
         from app.db.session import AsyncSessionLocal
-        
+
         async with AsyncSessionLocal() as db:
-            moq_service = MoQService(db, redis_client)
+            moq_service = MoQService(db, shared_redis)
             current_count = await moq_service.get_current_count(request_id)
             yield {"data": str(current_count)}
-        
+
         # Listen for updates
         try:
             while True:
@@ -99,12 +121,12 @@ async def moq_progress_stream(request_id: UUID):
             try:
                 await pubsub.unsubscribe(channel)
             except Exception as exc:
-                print(f"SSE unsubscribe error: {exc}")
+                logger.exception("SSE unsubscribe error for request_id=%s: %s", request_id, exc)
             try:
                 await pubsub.close()
             except Exception as exc:
-                print(f"SSE pubsub close error: {exc}")
-    
+                logger.exception("SSE pubsub close error for request_id=%s: %s", request_id, exc)
+
     return EventSourceResponse(event_generator())
 
 

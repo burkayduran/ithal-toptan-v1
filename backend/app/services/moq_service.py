@@ -2,6 +2,7 @@
 MoQ (Minimum Order Quantity) Service
 Redis-based atomic counter and trigger logic
 """
+import logging
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from uuid import UUID
@@ -15,6 +16,8 @@ from app.models.models import (
     WishlistEntry,
     Notification
 )
+
+logger = logging.getLogger(__name__)
 
 
 class MoQService:
@@ -87,8 +90,27 @@ return val
         return new_count
 
 
-    async def sync_counter_from_db(self, request_id: UUID) -> int:
-        """Force-sync Redis counter from DB aggregate to avoid drift under concurrent updates."""
+    async def sync_counter_from_db(self, request_id: UUID, *, force: bool = False) -> int:
+        """Sync Redis counter from DB canonical aggregate.
+
+        Under rapid back-to-back wishlist writes, calling DB SUM on every
+        request is expensive.  A lightweight per-request_id debounce lock
+        (TTL=2s) ensures at most one DB round-trip per 2-second window while
+        still converging quickly after a burst.
+
+        Pass ``force=True`` to bypass the debounce (used by cleanup/reset
+        flows where correctness is critical).
+        """
+        if not force:
+            lock_key = f"moq:sync:lock:{request_id}"
+            # SET NX — succeeds only when the key does not exist yet.
+            lock_acquired = await self.redis.set(lock_key, 1, nx=True, ex=2)
+            if not lock_acquired:
+                # A sync already happened within the last 2 s; skip the DB
+                # SUM and return whatever Redis currently holds.
+                cached = await self.redis.get(self._get_counter_key(request_id))
+                return int(cached) if cached is not None else 0
+
         result = await self.db.execute(
             select(func.coalesce(func.sum(WishlistEntry.quantity), 0))
             .where(
@@ -305,5 +327,7 @@ return val
 
         await self.db.commit()
 
-        current_count = await self.get_current_count(request_id)
-        await self.redis.set(self._get_counter_key(request_id), current_count, ex=30 * 24 * 3600)
+        # Always sync from DB canonical count to avoid caching a stale Redis value.
+        # force=True bypasses the debounce lock so the correct post-reset count
+        # is written to Redis and published to SSE subscribers immediately.
+        await self.sync_counter_from_db(request_id, force=True)

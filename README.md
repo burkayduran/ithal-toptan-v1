@@ -1,5 +1,38 @@
 # Toplu Alışveriş Platformu - Backend Core
 
+## 🚀 Production Deployment Notes
+
+### Database migrations (required in staging/production)
+
+Schema changes are managed through **Alembic**.
+`create_all()` is intentionally disabled in non-development environments.
+
+```bash
+# After every deploy, run:
+alembic upgrade head
+```
+
+**Never rely on `create_all()` in staging or production.**
+The app reads the `ENVIRONMENT` env var (default: `"development"`).
+Allowed values: `"development"`, `"local"`, `"staging"`, `"production"`.
+
+```
+# .env (staging/production)
+ENVIRONMENT=production   # create_all() is SKIPPED; run alembic upgrade head instead
+```
+
+```
+# .env (local dev / Docker)
+ENVIRONMENT=development  # create_all() runs automatically for convenience
+```
+
+### Redis connection pooling
+
+A single shared Redis client is created at startup (`app.state.redis`) and
+reused across all requests.  Do **not** call `.aclose()` on it per-request.
+
+---
+
 ## ✅ Tamamlanan Özellikler
 
 ### Hafta 1 - Backend Core ✓
@@ -132,7 +165,15 @@ celery -A app.tasks.celery_app flower --port=5555
 
 ## 📊 Veritabanı
 
-Tables automatically created on startup:
+Tables managed via **Alembic migrations**.
+
+In **development** (`ENVIRONMENT=development`), SQLAlchemy `create_all()` runs
+at startup for convenience (no migration step needed locally).
+
+In **staging/production** (`ENVIRONMENT=staging|production`), `create_all()` is
+**skipped**.  Run `alembic upgrade head` as part of every deploy.
+
+Tables:
 - users
 - categories
 - product_requests
