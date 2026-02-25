@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from typing import Optional, List
-from sqlalchemy import String, Boolean, Integer, Numeric, ForeignKey, DateTime, Text, ARRAY, Index, UniqueConstraint
+from sqlalchemy import String, Boolean, Integer, Numeric, ForeignKey, DateTime, Text, ARRAY, Index, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
@@ -67,14 +67,14 @@ class ProductRequest(Base):
     description: Mapped[Optional[str]] = mapped_column(Text)
     category_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("categories.id"))
     reference_url: Mapped[Optional[str]] = mapped_column(Text)
-    images: Mapped[List[str]] = mapped_column(ARRAY(Text), default=list)
+    images: Mapped[List[str]] = mapped_column(ARRAY(Text), nullable=False, default=list, server_default=text("'{}'"))
     expected_price_try: Mapped[Optional[float]] = mapped_column(Numeric(10, 2))
-    
+
     # Status: pending, sourcing, active, moq_reached, ordered, delivered, cancelled
-    status: Mapped[str] = mapped_column(String(50), default="pending", index=True)
-    
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="pending", server_default=text("'pending'"), index=True)
+
     created_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
-    view_count: Mapped[int] = mapped_column(Integer, default=0)
+    view_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
     admin_notes: Mapped[Optional[str]] = mapped_column(Text)
     
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -101,7 +101,7 @@ class SupplierOffer(Base):
     request_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("product_requests.id"), nullable=False)
     
     supplier_name: Mapped[Optional[str]] = mapped_column(String(255))
-    supplier_country: Mapped[str] = mapped_column(String(10), default="CN")
+    supplier_country: Mapped[str] = mapped_column(String(10), nullable=False, default="CN", server_default=text("'CN'"))
     alibaba_product_url: Mapped[Optional[str]] = mapped_column(Text)
     
     # Pricing
@@ -114,9 +114,9 @@ class SupplierOffer(Base):
     # Calculated
     usd_rate_used: Mapped[Optional[float]] = mapped_column(Numeric(10, 4))
     selling_price_try: Mapped[Optional[float]] = mapped_column(Numeric(10, 2))
-    margin_rate: Mapped[float] = mapped_column(Numeric(5, 2), default=0.25)
-    
-    is_selected: Mapped[bool] = mapped_column(Boolean, default=False)
+    margin_rate: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False, default=0.25, server_default=text("0.25"))
+
+    is_selected: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
     notes: Mapped[Optional[str]] = mapped_column(Text)
     
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
