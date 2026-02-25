@@ -1,39 +1,32 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from uuid import UUID
 
 from app.core.config import settings
+from app.core.redis import create_redis_pool
 from app.db.session import engine, Base
 from app.api.v1.endpoints import auth, products, wishlist
 from app.api.admin import admin
-import redis.asyncio as aioredis
 from sse_starlette.sse import EventSourceResponse
 import asyncio
-
-
-# Global Redis connection for SSE
-redis_client: aioredis.Redis = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup/shutdown events."""
-    global redis_client
-    
     # Startup: Create tables
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    
-    # Connect to Redis and verify the connection is live
-    redis_client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
-    await redis_client.ping()
+
+    # Connect to Redis using a shared connection pool
+    app.state.redis = create_redis_pool()
+    await app.state.redis.ping()
 
     yield
-    
-    # Shutdown
-    if redis_client:
-        await redis_client.aclose()
+
+    # Shutdown: close Redis pool and DB engine
+    await app.state.redis.aclose()
     await engine.dispose()
 
 
@@ -65,11 +58,12 @@ app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
 
 # SSE endpoint for real-time MoQ progress
 @app.get("/api/v1/moq/progress/{request_id}")
-async def moq_progress_stream(request_id: UUID):
+async def moq_progress_stream(request_id: UUID, request: Request):
     """
     Server-Sent Events endpoint for real-time MoQ progress updates.
     Frontend can use EventSource to listen for updates.
     """
+    redis_client = getattr(request.app.state, "redis", None)
     if redis_client is None:
         raise HTTPException(status_code=503, detail="Real-time service unavailable")
 

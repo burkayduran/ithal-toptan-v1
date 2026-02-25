@@ -63,69 +63,114 @@ GET    /api/v1/products/categories/     # Kategoriler
 
 ---
 
-## 🚀 Hızlı Başlangıç
+## 🚀 Quick Start (Mac / Linux)
 
-### Gereksinimler
-- Docker & Docker Compose
-- Python 3.12+ (local development için)
+### Prerequisites
+- Docker & Docker Compose **or** Python 3.12+ with Postgres 16 + Redis 7
 
-### Docker ile Çalıştırma (Önerilen)
+### Option A – Docker (recommended, zero config)
 
 ```bash
-# 1. Docker compose ile tüm servisleri başlat
+# Clone and start all services (API, Celery, Postgres, Redis, Flower)
+git clone <repo-url>
+cd ithal-toptan-v1
+
+# Copy environment template
+cp backend/.env.example backend/.env   # edit SECRET_KEY at minimum
+
+# Start everything
 docker compose up -d
 
-# 2. API hazır!
-# - API: http://localhost:8000
-# - Docs: http://localhost:8000/api/docs
-# - Health: http://localhost:8000/health
+# Verify
+curl http://localhost:8000/health
+# → {"status":"ok","app":"İthal Toptan 2.0","version":"2.0.0"}
 
-# Logları görüntüle
+# Interactive API docs
+open http://localhost:8000/api/docs
+
+# Logs
 docker compose logs -f api
 
-# Durdur
+# Stop
 docker compose down
 ```
 
-### Local Development (Docker olmadan)
+### Option B – Local Python (Mac / Linux)
 
 ```bash
-# 1. PostgreSQL ve Redis yükle (macOS)
-brew install postgresql redis
+# 1. Install dependencies (macOS with Homebrew)
+brew install postgresql@16 redis python@3.12
 
-# 2. Servisleri başlat
-brew services start postgresql
+# Linux (Debian/Ubuntu)
+sudo apt-get install -y postgresql redis-server python3.12
+
+# 2. Start Postgres + Redis
+brew services start postgresql@16   # macOS
 brew services start redis
+# or: pg_ctl start / redis-server --daemonize yes (Linux)
 
-# 3. Database oluştur
+# 3. Create the database
 createdb toplu_alisveris
 
-# 4. Virtual environment
+# 4. Python virtual environment
 cd backend
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+python3.12 -m venv venv
+source venv/bin/activate
 
-# 5. Dependencies yükle
+# 5. Install Python dependencies (includes pytest + alembic)
 pip install -r requirements.txt
 
-# 6. .env dosyasını yapılandır
-cp .env.example .env
-# Düzenle:
-# DATABASE_URL=postgresql+asyncpg://localhost/toplu_alisveris
-# REDIS_URL=redis://localhost:6379/0
-# RESEND_API_KEY=re_xxxxx (opsiyonel)
+# 6. Create .env
+cat > .env <<'EOF'
+SECRET_KEY=change-me-to-random-string
+DATABASE_URL=postgresql+asyncpg://localhost/toplu_alisveris
+REDIS_URL=redis://localhost:6379/0
+EMAIL_PROVIDER=fake
+MOQ_SYNC_STRATEGY=lazy
+EOF
 
-# 7. API server başlat
+# 7. (Optional) Run Alembic migrations instead of auto-create
+alembic upgrade head
+
+# 8. Start the API (auto-creates tables if not using Alembic)
 uvicorn app.main:app --reload --port 8000
 
-# 8. Celery worker (ayrı terminal)
+# 9. Celery worker (separate terminal, same venv)
 celery -A app.tasks.celery_app worker --loglevel=info
 
-# 9. Celery beat (ayrı terminal)
+# 10. Celery beat scheduler (separate terminal)
 celery -A app.tasks.celery_app beat --loglevel=info
 
-# 10. Flower monitoring (opsiyonel, ayrı terminal)
+# 11. Flower monitoring UI (optional, separate terminal)
 celery -A app.tasks.celery_app flower --port=5555
+# open http://localhost:5555
+```
+
+### Environment Variables
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `SECRET_KEY` | ✅ | – | JWT signing secret |
+| `DATABASE_URL` | ✅ | – | `postgresql+asyncpg://...` |
+| `REDIS_URL` | ✅ | – | `redis://host:port/db` |
+| `EMAIL_PROVIDER` | | `resend` | `resend` or `fake` |
+| `RESEND_API_KEY` | | – | Required if `EMAIL_PROVIDER=resend` |
+| `MOQ_SYNC_STRATEGY` | | `lazy` | `strict` (sync every write) or `lazy` (sync on cache miss) |
+| `FRONTEND_URL` | | `http://localhost:3000` | CORS allowed origin |
+
+### Seed data for wishlist testing
+
+```bash
+# Create admin + product + publish + wishlist entry automatically
+cd backend
+python scripts/seed_test_data.py
+
+# Or print the equivalent curl sequence
+python scripts/seed_test_data.py --curl
+
+# Promote admin manually (required before seeding):
+# docker exec -it toplu_db psql -U postgres toplu_alisveris \
+#   -c "UPDATE users SET is_admin=true WHERE email='admin@test.com';"
 ```
 
 ---
@@ -313,7 +358,51 @@ curl http://localhost:8000/health
 
 ---
 
-## 🧪 Test
+## 🧪 Running Tests
+
+### Integration tests (requires live Postgres + Redis)
+
+```bash
+cd backend
+
+# Set required env vars (or create a .env.test file)
+export DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/test_ithal
+export REDIS_URL=redis://localhost:6379/1
+export SECRET_KEY=test-secret-key
+
+# Create test database
+createdb test_ithal  # or: psql -c "CREATE DATABASE test_ithal;"
+
+# Install test dependencies (already in requirements.txt)
+pip install -r requirements.txt
+
+# Verify syntax
+python -m compileall app
+
+# Run all integration tests
+pytest -q
+
+# Run a specific test
+pytest -q tests/test_integration.py::test_auth_register_login_me -v
+```
+
+### Tests included
+
+| # | Test | Description |
+|---|---|---|
+| 1 | `test_auth_register_login_me` | Register → login → GET /me |
+| 2 | `test_admin_create_and_publish_product` | Admin creates product + publishes to `active` |
+| 3 | `test_wishlist_add_returns_200_and_correct_response` | Wishlist add returns 200 + correct `WishlistResponse` |
+| 4 | `test_wishlist_add_rejected_for_draft_product` | Draft product returns 400 with `{error: "product_not_open", ...}` |
+| 5 | `test_moq_threshold_transition_is_atomic` | Concurrent adds – only one MoQ transition fires |
+| 6 | `test_sse_returns_503_when_redis_unavailable` | SSE returns 503 when `app.state.redis` is None |
+| 7 | `test_sse_connects_and_receives_initial_message` | SSE streams initial count event |
+| 8 | `test_raw_sql_insert_respects_server_defaults` | Raw SQL insert respects `server_default` (Alembic migration verification) |
+
+### CI – GitHub Actions
+
+Tests run automatically on every push/PR via `.github/workflows/tests.yml`
+using Postgres 16 + Redis 7 service containers.
 
 ## 📝 Tamamlanan ve Kalan İşler
 

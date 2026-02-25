@@ -33,7 +33,10 @@ class Settings(BaseSettings):
     
     # TCMB
     TCMB_API_URL: str = "https://evds2.tcmb.gov.tr"
-    
+
+    # MoQ sync strategy: "strict" (sync after every write) | "lazy" (sync only on miss/mismatch)
+    MOQ_SYNC_STRATEGY: str = "lazy"
+
     class Config:
         env_file = ".env"
         case_sensitive = True
