@@ -13,8 +13,6 @@ Coverage:
 """
 import asyncio
 import uuid
-from unittest.mock import AsyncMock, MagicMock, patch
-
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient
@@ -208,20 +206,16 @@ async def test_moq_threshold_transition_is_atomic(client: AsyncClient):
         token = await register_and_login(client, email, password)
         users.append(token)
 
-    # Patch Celery tasks so they don't actually execute
-    with patch("app.services.moq_service.send_moq_reached_email") as mock_email, \
-         patch("app.services.moq_service.cleanup_expired_entries") as mock_cleanup:
-        mock_email.delay = MagicMock()
-        mock_cleanup.apply_async = MagicMock()
+    # In CI, Redis is available as a Celery broker, so .delay()/.apply_async()
+    # simply enqueue tasks without executing them (no worker running in tests).
+    async def add_one(token: str):
+        return await client.post(
+            "/api/v1/wishlist/add",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"request_id": product_id, "quantity": 1},
+        )
 
-        async def add_one(token: str):
-            return await client.post(
-                "/api/v1/wishlist/add",
-                headers={"Authorization": f"Bearer {token}"},
-                json={"request_id": product_id, "quantity": 1},
-            )
-
-        responses = await asyncio.gather(*[add_one(t) for t in users])
+    responses = await asyncio.gather(*[add_one(t) for t in users])
 
     # All requests should succeed
     for resp in responses:

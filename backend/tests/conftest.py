@@ -9,7 +9,6 @@ Requires:
 These are set in the environment or via .env.test.
 The GitHub Actions workflow provides Postgres + Redis service containers.
 """
-import asyncio
 import os
 import pytest
 import pytest_asyncio
@@ -26,7 +25,7 @@ os.environ.setdefault("EMAIL_PROVIDER", "fake")
 os.environ.setdefault("MOQ_SYNC_STRATEGY", "strict")
 
 from app.main import app  # noqa: E402  – import after env setup
-from app.db.session import Base, engine as _default_engine  # noqa: E402
+from app.db.session import Base  # noqa: E402
 from app.core.config import settings  # noqa: E402
 
 
@@ -37,16 +36,23 @@ TestSessionLocal = async_sessionmaker(
 )
 
 
-@pytest.fixture(scope="session")
-def event_loop():
-    """Use a single event-loop for the entire test session."""
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
+# ── Session-scoped Redis pool for the app under test ─────────────────────────
+# httpx's ASGITransport only sends type="http" scopes; it never fires the
+# ASGI lifespan events, so FastAPI's lifespan context manager (which calls
+# create_redis_pool() and stores the result in app.state.redis) never runs.
+# We replicate that startup step here so get_redis() works during tests.
+@pytest_asyncio.fixture(scope="session", autouse=True)
+async def init_app_redis():
+    from app.core.redis import create_redis_pool
+    app.state.redis = create_redis_pool()
+    await app.state.redis.ping()   # fail fast if Redis is unreachable
+    yield
+    await app.state.redis.aclose()
+    app.state.redis = None
 
 
 @pytest_asyncio.fixture(scope="session", autouse=True)
-async def create_tables():
+async def create_tables(init_app_redis):
     """Create all tables once at session start and drop them at the end."""
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
