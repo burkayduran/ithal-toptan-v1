@@ -109,6 +109,8 @@ async def add_to_wishlist(
         )
     )
     existing = existing_result.scalar_one_or_none()
+    # Snapshot old quantity before UPSERT so we can compute the Redis delta later.
+    old_quantity: int = existing.quantity if existing else 0
 
     if product.status == "moq_reached":
         initial_status = "notified"
@@ -162,6 +164,17 @@ async def add_to_wishlist(
         await db.rollback()
 
     moq_service = MoQService(db, redis)
+
+    # Fast path: update the Redis counter by the exact quantity delta so that
+    # pub/sub subscribers receive an immediate, accurate value without a full
+    # DB round-trip.  _maybe_sync_counter below heals any drift in strict mode
+    # or on a cache-miss in lazy mode.
+    delta = data.quantity - old_quantity
+    if delta > 0:
+        await moq_service.increment(data.request_id, delta)
+    elif delta < 0:
+        await moq_service.decrement(data.request_id, abs(delta))
+
     await _maybe_sync_counter(moq_service, data.request_id, redis)
 
     if should_notify:

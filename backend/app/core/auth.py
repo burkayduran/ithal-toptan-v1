@@ -18,8 +18,8 @@ pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 # HTTP Bearer security
 security = HTTPBearer()
 
-# JWT settings
-ALGORITHM = "HS256"
+# JWT signing algorithm (sourced from settings so .env ALGORITHM=HS256 is consistent)
+ALGORITHM = settings.ALGORITHM
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
