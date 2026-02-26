@@ -83,9 +83,9 @@ BEGIN
     FROM product_requests
    WHERE title = 'smoke_defaults_pr';
 
-  ASSERT r.status    = 'pending',  'status default wrong: ' || r.status;
-  ASSERT r.view_count = 0,         'view_count default wrong: ' || r.view_count;
-  ASSERT r.images    = '{}',       'images default wrong';
+  ASSERT r.status     = 'pending',  'status default wrong: ' || r.status;
+  ASSERT r.view_count = 0,          'view_count default wrong: ' || r.view_count;
+  ASSERT r.images     = '{}',       'images default wrong';
   RAISE NOTICE 'product_requests defaults OK (status=%, view_count=%, images={})',
         r.status, r.view_count;
 END $$;
@@ -105,11 +105,78 @@ BEGIN
     FROM supplier_offers
    WHERE request_id = (SELECT id FROM product_requests WHERE title = 'smoke_defaults_pr');
 
-  ASSERT r.supplier_country = 'CN',    'supplier_country default wrong: ' || r.supplier_country;
-  ASSERT r.margin_rate      = 0.25,    'margin_rate default wrong: ' || r.margin_rate;
-  ASSERT r.is_selected      = false,   'is_selected default wrong';
+  ASSERT r.supplier_country = 'CN',   'supplier_country default wrong: ' || r.supplier_country;
+  ASSERT r.margin_rate      = 0.25,   'margin_rate default wrong: ' || r.margin_rate;
+  ASSERT r.is_selected      = false,  'is_selected default wrong';
   RAISE NOTICE 'supplier_offers defaults OK (country=%, margin=%, selected=%)',
         r.supplier_country, r.margin_rate, r.is_selected;
+END $$;
+
+-- ── users: insert only required columns (migration 0003) ────────────────────
+INSERT INTO users (email, hashed_password)
+VALUES ('smoke_defaults@example.com', '$2b$12$fakehashforsmoke');
+
+DO $$
+DECLARE
+  r RECORD;
+BEGIN
+  SELECT email_verified, is_active, is_admin, notification_pref
+    INTO r
+    FROM users
+   WHERE email = 'smoke_defaults@example.com';
+
+  ASSERT r.email_verified = false,  'email_verified default wrong: ' || r.email_verified;
+  ASSERT r.is_active      = true,   'is_active default wrong: '      || r.is_active;
+  ASSERT r.is_admin       = false,  'is_admin default wrong: '       || r.is_admin;
+  ASSERT r.notification_pref->>'email' = 'true',
+    'notification_pref.email default wrong';
+  ASSERT r.notification_pref->>'sms' = 'false',
+    'notification_pref.sms default wrong';
+  RAISE NOTICE 'users defaults OK (email_verified=%, is_active=%, is_admin=%)',
+        r.email_verified, r.is_active, r.is_admin;
+END $$;
+
+-- ── categories: insert only required columns (migration 0003) ───────────────
+INSERT INTO categories (name, slug) VALUES ('Smoke Category', 'smoke-cat');
+
+DO $$
+DECLARE
+  r RECORD;
+BEGIN
+  SELECT is_restricted, sort_order
+    INTO r
+    FROM categories
+   WHERE slug = 'smoke-cat';
+
+  ASSERT r.is_restricted = false,  'is_restricted default wrong: ' || r.is_restricted;
+  ASSERT r.sort_order    = 0,      'sort_order default wrong: '    || r.sort_order;
+  RAISE NOTICE 'categories defaults OK (is_restricted=%, sort_order=%)',
+        r.is_restricted, r.sort_order;
+END $$;
+
+-- ── wishlist_entries: insert only required FK columns (migration 0003) ───────
+INSERT INTO wishlist_entries (request_id, user_id)
+SELECT p.id, u.id
+  FROM product_requests p, users u
+ WHERE p.title = 'smoke_defaults_pr'
+   AND u.email = 'smoke_defaults@example.com';
+
+DO $$
+DECLARE
+  r RECORD;
+BEGIN
+  SELECT w.quantity, w.status
+    INTO r
+    FROM wishlist_entries w
+    JOIN product_requests p ON p.id = w.request_id
+    JOIN users             u ON u.id = w.user_id
+   WHERE p.title = 'smoke_defaults_pr'
+     AND u.email = 'smoke_defaults@example.com';
+
+  ASSERT r.quantity = 1,          'quantity default wrong: '  || r.quantity;
+  ASSERT r.status   = 'waiting',  'status default wrong: '    || r.status;
+  RAISE NOTICE 'wishlist_entries defaults OK (quantity=%, status=%)',
+        r.quantity, r.status;
 END $$;
 SQL
 
@@ -120,8 +187,8 @@ echo "=== [5/5] Confirming alembic_version ==="
 REVISION=$(psql "${SYNC_URL}" -t -c "SELECT version_num FROM alembic_version;" | tr -d '[:space:]')
 echo "  Current revision: ${REVISION}"
 
-# Acceptable heads are 0001 (initial) or 0002 (server defaults added on top)
-if [[ "${REVISION}" == "0001" || "${REVISION}" == "0002" ]]; then
+# Acceptable heads: 0001 (initial), 0002 (product/offer defaults), 0003 (all remaining defaults)
+if [[ "${REVISION}" == "0001" || "${REVISION}" == "0002" || "${REVISION}" == "0003" ]]; then
     echo "  alembic_version is at expected head ✓"
 else
     echo "  UNEXPECTED revision '${REVISION}'" >&2

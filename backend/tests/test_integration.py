@@ -5,13 +5,14 @@ Run with:
     pytest -q backend/tests/test_integration.py
 
 Coverage:
-  1. auth  – register / login / me
-  2. admin – create product + publish (status=active)
-  3. wishlist – add returns 200 and correct WishlistResponse
-  4. moq concurrency – threshold transition is atomic (no duplicate side-effects)
-  5. SSE – returns 503 if Redis unavailable; otherwise connects and receives ≥1 message
-  6. alembic – raw SQL insert respects server_default values
-  9. same-user UPSERT – concurrent adds yield one DB row; Redis == DB aggregate
+  1.  auth  – register / login / me
+  2.  admin – create product + publish (status=active)
+  3.  wishlist – add returns 200 and correct WishlistResponse
+  4.  moq concurrency – threshold transition is atomic (no duplicate side-effects)
+  5.  SSE – returns 503 if Redis unavailable; otherwise connects and receives ≥1 message
+  6.  alembic – product_requests/supplier_offers raw SQL INSERT respects server_defaults
+  6b. alembic – users/categories/wishlist_entries raw SQL INSERT respects server_defaults
+  9.  same-user UPSERT – concurrent adds yield one DB row; Redis == DB aggregate
 """
 import asyncio
 import uuid
@@ -333,6 +334,88 @@ async def test_raw_sql_insert_respects_server_defaults():
         assert row.supplier_country == "CN", f"Expected 'CN', got {row.supplier_country!r}"
         assert float(row.margin_rate) == 0.25, f"Expected 0.25, got {row.margin_rate!r}"
         assert row.is_selected is False, f"Expected False, got {row.is_selected!r}"
+
+        await session.rollback()  # Don't persist; clean_tables fixture handles it
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 6b. Alembic server_default – users / categories / wishlist_entries
+# ──────────────────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_raw_sql_insert_user_category_wishlist_defaults():
+    """
+    Raw SQL inserts into users, categories, and wishlist_entries using only
+    the mandatory (NOT NULL, no default) columns must succeed and return the
+    correct DB-level defaults added by migrations 0003.
+
+    Checks:
+      users:            email_verified=false, is_active=true, is_admin=false,
+                        notification_pref={"email":true,"sms":false}
+      categories:       is_restricted=false, sort_order=0
+      wishlist_entries: quantity=1, status='waiting'
+    """
+    from sqlalchemy import text
+    from tests.conftest import TestSessionLocal
+
+    async with TestSessionLocal() as session:
+        # ── users ──────────────────────────────────────────────────────────────
+        await session.execute(text("""
+            INSERT INTO users (email, hashed_password)
+            VALUES ('smoke_defaults@example.com', '$2b$12$fakehashedpassword')
+        """))
+        u = (await session.execute(text("""
+            SELECT email_verified, is_active, is_admin, notification_pref
+            FROM users WHERE email = 'smoke_defaults@example.com'
+        """))).fetchone()
+
+        assert u.email_verified is False, f"email_verified: expected False, got {u.email_verified!r}"
+        assert u.is_active is True,       f"is_active: expected True, got {u.is_active!r}"
+        assert u.is_admin is False,       f"is_admin: expected False, got {u.is_admin!r}"
+        assert u.notification_pref == {"email": True, "sms": False}, (
+            f"notification_pref: expected email/sms defaults, got {u.notification_pref!r}"
+        )
+
+        # ── categories ─────────────────────────────────────────────────────────
+        await session.execute(text("""
+            INSERT INTO categories (name, slug) VALUES ('Smoke Cat', 'smoke-cat')
+        """))
+        c = (await session.execute(text("""
+            SELECT is_restricted, sort_order
+            FROM categories WHERE slug = 'smoke-cat'
+        """))).fetchone()
+
+        assert c.is_restricted is False, f"is_restricted: expected False, got {c.is_restricted!r}"
+        assert c.sort_order == 0,        f"sort_order: expected 0, got {c.sort_order!r}"
+
+        # ── wishlist_entries ───────────────────────────────────────────────────
+        # We need a user_id and a product_id that exist; reuse the rows above.
+        uid_row = (await session.execute(text(
+            "SELECT id FROM users WHERE email = 'smoke_defaults@example.com'"
+        ))).fetchone()
+        user_id = uid_row[0]
+
+        # product_requests row (title only – server_defaults cover the rest)
+        await session.execute(text("""
+            INSERT INTO product_requests (title) VALUES ('Smoke WL Product')
+        """))
+        pid_row = (await session.execute(text(
+            "SELECT id FROM product_requests WHERE title = 'Smoke WL Product'"
+        ))).fetchone()
+        product_id = pid_row[0]
+
+        await session.execute(text("""
+            INSERT INTO wishlist_entries (request_id, user_id)
+            VALUES (:pid, :uid)
+        """), {"pid": product_id, "uid": user_id})
+        w = (await session.execute(text("""
+            SELECT quantity, status
+            FROM wishlist_entries
+            WHERE request_id = :pid AND user_id = :uid
+        """), {"pid": product_id, "uid": user_id})).fetchone()
+
+        assert w.quantity == 1,         f"quantity: expected 1, got {w.quantity!r}"
+        assert w.status == "waiting",   f"status: expected 'waiting', got {w.status!r}"
 
         await session.rollback()  # Don't persist; clean_tables fixture handles it
 

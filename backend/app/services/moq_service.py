@@ -2,12 +2,15 @@
 MoQ (Minimum Order Quantity) Service
 Redis-based atomic counter and trigger logic
 """
+import logging
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from uuid import UUID
 import redis.asyncio as aioredis
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, update
+
+logger = logging.getLogger(__name__)
 
 from app.models.models import (
     ProductRequest,
@@ -88,7 +91,12 @@ return val
 
 
     async def sync_counter_from_db(self, request_id: UUID) -> int:
-        """Force-sync Redis counter from DB aggregate to avoid drift under concurrent updates."""
+        """Force-sync Redis counter from DB aggregate to avoid drift under concurrent updates.
+
+        Also emits a WARNING log when the current Redis value diverges from the
+        DB aggregate so that operational drift is visible in application logs /
+        monitoring systems without requiring an extra metrics exporter.
+        """
         result = await self.db.execute(
             select(func.coalesce(func.sum(WishlistEntry.quantity), 0))
             .where(
@@ -97,6 +105,22 @@ return val
             )
         )
         db_count = int(result.scalar() or 0)
+
+        # Mismatch detection: read the current Redis value before overwriting it
+        # so we can warn if the counter has drifted from the DB aggregate.
+        redis_raw = await self.redis.get(self._get_counter_key(request_id))
+        if redis_raw is not None:
+            redis_count = int(redis_raw)
+            if redis_count != db_count:
+                logger.warning(
+                    "MoQ counter drift detected for request_id=%s: "
+                    "Redis=%d DB=%d (delta=%+d). Healing Redis to DB value.",
+                    request_id,
+                    redis_count,
+                    db_count,
+                    db_count - redis_count,
+                )
+
         await self.redis.set(self._get_counter_key(request_id), db_count, ex=30 * 24 * 3600)
         await self.redis.publish(f"moq:progress:{request_id}", str(db_count))
         return db_count

@@ -23,11 +23,15 @@ class User(Base):
     district: Mapped[Optional[str]] = mapped_column(String(100))
     address: Mapped[Optional[str]] = mapped_column(Text)
     
-    email_verified: Mapped[bool] = mapped_column(Boolean, default=False)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
-    
-    notification_pref: Mapped[dict] = mapped_column(JSONB, default={"email": True, "sms": False})
+    email_verified: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
+    is_admin: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+
+    notification_pref: Mapped[dict] = mapped_column(
+        JSONB,
+        default={"email": True, "sms": False},
+        server_default=text("""'{"email": true, "sms": false}'"""),
+    )
     
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_active_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
@@ -47,9 +51,9 @@ class Category(Base):
     slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     parent_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("categories.id"))
     gumruk_rate: Mapped[Optional[float]] = mapped_column(Numeric(5, 2))
-    is_restricted: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_restricted: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     icon: Mapped[Optional[str]] = mapped_column(String(50))
-    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
     
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -133,10 +137,10 @@ class WishlistEntry(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     request_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("product_requests.id"), nullable=False, index=True)
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
-    quantity: Mapped[int] = mapped_column(Integer, default=1)
-    
+    quantity: Mapped[int] = mapped_column(Integer, default=1, server_default=text("1"))
+
     # Status: waiting, notified, paid, expired, cancelled
-    status: Mapped[str] = mapped_column(String(20), default="waiting", index=True)
+    status: Mapped[str] = mapped_column(String(20), default="waiting", server_default=text("'waiting'"), index=True)
     
     joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     notified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
@@ -165,15 +169,15 @@ class Payment(Base):
     request_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("product_requests.id"), nullable=False, index=True)
     
     amount_try: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
-    quantity: Mapped[int] = mapped_column(Integer, default=1)
-    
+    quantity: Mapped[int] = mapped_column(Integer, default=1, server_default=text("1"))
+
     # iyzico
     iyzico_payment_id: Mapped[Optional[str]] = mapped_column(String(100))
     iyzico_token: Mapped[Optional[str]] = mapped_column(String(255))
     iyzico_conversation_id: Mapped[Optional[str]] = mapped_column(String(100))
     
     # Status: pending, success, failed, refunded
-    status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
+    status: Mapped[str] = mapped_column(String(20), default="pending", server_default=text("'pending'"), index=True)
     failure_reason: Mapped[Optional[str]] = mapped_column(Text)
     
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -198,7 +202,7 @@ class BatchOrder(Base):
     payment_total_try: Mapped[Optional[float]] = mapped_column(Numeric(10, 2))
     
     # Status: pending, confirmed, shipped, delivered
-    status: Mapped[str] = mapped_column(String(30), default="pending", index=True)
+    status: Mapped[str] = mapped_column(String(30), default="pending", server_default=text("'pending'"), index=True)
     supplier_order_ref: Mapped[Optional[str]] = mapped_column(String(100))
     tracking_number: Mapped[Optional[str]] = mapped_column(String(100))
     
@@ -220,11 +224,11 @@ class Notification(Base):
     
     # Type: moq_reached, payment_reminder, order_confirmed, shipped, delivered
     type: Mapped[str] = mapped_column(String(50), nullable=False)
-    channel: Mapped[str] = mapped_column(String(20), default="email")  # email, sms, push
+    channel: Mapped[str] = mapped_column(String(20), default="email", server_default=text("'email'"))  # email, sms, push
     subject: Mapped[Optional[str]] = mapped_column(String(255))
-    
+
     # Status: pending, sent, delivered, opened, clicked, failed
-    status: Mapped[str] = mapped_column(String(20), default="pending")
+    status: Mapped[str] = mapped_column(String(20), default="pending", server_default=text("'pending'"))
     
     sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     opened_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))

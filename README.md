@@ -397,8 +397,9 @@ pytest -q tests/test_integration.py::test_auth_register_login_me -v
 | 5 | `test_moq_threshold_transition_is_atomic` | Concurrent adds – only one MoQ transition fires |
 | 6 | `test_sse_returns_503_when_redis_unavailable` | SSE returns 503 when `app.state.redis` is None |
 | 7 | `test_sse_connects_and_receives_initial_message` | SSE streams initial count event |
-| 8 | `test_raw_sql_insert_respects_server_defaults` | Raw SQL insert respects `server_default` (Alembic migration verification) |
-| 9 | `test_same_user_concurrent_upsert` | Same user, N concurrent adds with different qtys → 1 DB row, Redis == DB qty |
+| 8  | `test_raw_sql_insert_respects_server_defaults` | Raw SQL insert: `product_requests` / `supplier_offers` server_defaults |
+| 8b | `test_raw_sql_insert_user_category_wishlist_defaults` | Raw SQL insert: `users` / `categories` / `wishlist_entries` server_defaults (migration 0003) |
+| 9  | `test_same_user_concurrent_upsert` | Same user, N concurrent adds with different qtys → 1 DB row, Redis == DB qty |
 
 ### CI – GitHub Actions
 
