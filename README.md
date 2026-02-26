@@ -398,11 +398,68 @@ pytest -q tests/test_integration.py::test_auth_register_login_me -v
 | 6 | `test_sse_returns_503_when_redis_unavailable` | SSE returns 503 when `app.state.redis` is None |
 | 7 | `test_sse_connects_and_receives_initial_message` | SSE streams initial count event |
 | 8 | `test_raw_sql_insert_respects_server_defaults` | Raw SQL insert respects `server_default` (Alembic migration verification) |
+| 9 | `test_same_user_concurrent_upsert` | Same user, N concurrent adds with different qtys → 1 DB row, Redis == DB qty |
 
 ### CI – GitHub Actions
 
 Tests run automatically on every push/PR via `.github/workflows/tests.yml`
 using Postgres 16 + Redis 7 service containers.
+
+---
+
+## 🔬 Smoke Tests & Race-Condition Tests
+
+### Alembic migration smoke test
+
+Verifies that `alembic upgrade head` succeeds on a clean database **and** that
+all `server_default` values are correct (raw SQL inserts, no ORM).
+
+```bash
+cd backend
+
+# Requires: psql + createdb + alembic in $PATH, Postgres running locally
+bash scripts/alembic_smoke_test.sh
+
+# Optional overrides:
+PGHOST=localhost PGPORT=5432 PGUSER=postgres PGPASSWORD=postgres \
+  bash scripts/alembic_smoke_test.sh
+```
+
+What it checks:
+- `createdb` → `alembic upgrade head` exits 0
+- `ALGORITHM=HS256` in the environment is silently accepted (demonstrates `extra="ignore"` fix)
+- `product_requests`: `status='pending'`, `view_count=0`, `images='{}'` (raw SQL insert)
+- `supplier_offers`: `supplier_country='CN'`, `margin_rate=0.25`, `is_selected=false`
+- `alembic_version` table contains `0001` or `0002`
+- Test database is dropped on exit (trap cleanup)
+
+### Race-condition / concurrency test
+
+Requires a **running API** (not in-process). Fires parallel wishlist adds and
+verifies Redis integrity + PostgreSQL unique constraint.
+
+```bash
+cd backend
+pip install httpx    # already in requirements.txt
+
+# Start the API first:
+uvicorn app.main:app --port 8000 &
+
+python scripts/test_race_condition.py
+# Optional flags:
+python scripts/test_race_condition.py --workers 10 --moq 5 --base-url http://localhost:8000
+```
+
+Checks performed:
+1. Multi-user concurrent adds → all return 200
+2. Unique constraint: no duplicate `(user_id, request_id)` rows
+3. Redis counter == DB aggregate after writes settle
+4. `moq_reached` transition fires at most once (idempotent)
+5. Idempotent same-user re-add (same quantity) doesn't phantom-increment
+6. **Same-user concurrent UPSERT** (5 concurrent adds with quantities 1–5):
+   - Exactly 1 DB row (PostgreSQL `ON CONFLICT DO UPDATE`)
+   - Final quantity is one of the submitted values (last writer wins)
+   - Redis counter == final DB quantity
 
 ## 📝 Tamamlanan ve Kalan İşler
 

@@ -180,6 +180,89 @@ async def main(args: argparse.Namespace) -> None:
             else:
                 print(f"  ✓ idempotent re-add did not duplicate quantity")
 
+        # ── 8. Same-user concurrent UPSERT with different quantities ──────────
+        #
+        # Fire N requests from the SAME user token concurrently, each asking for
+        # a different quantity.  Invariants:
+        #   a. All N responses are HTTP 200 (no 409 / constraint error leaks).
+        #   b. Exactly ONE row for (user_id, product_id) in the DB.
+        #   c. Final quantity stored in DB is one of the submitted values.
+        #   d. Redis counter == DB quantity after all writes settle.
+        print("[CHECK] Same-user concurrent UPSERT with varying quantities …")
+
+        # Create a fresh product so the MoQ transition doesn't interfere
+        resp = await client.post("/api/admin/products", headers=admin_headers, json={
+            "title": f"UPSERT Stress Test {uuid.uuid4().hex[:6]}",
+            "description": "same-user concurrent UPSERT check",
+            "images": [],
+            "unit_price_usd": 5.0,
+            "moq": 9999,           # never trigger moq_reached
+            "shipping_cost_usd": 0.0,
+            "customs_rate": 0.0,
+            "margin_rate": 0.0,
+        })
+        resp.raise_for_status()
+        upsert_product_id = resp.json()["id"]
+        resp = await client.post(
+            f"/api/admin/products/{upsert_product_id}/publish",
+            headers=admin_headers,
+        )
+        resp.raise_for_status()
+
+        stress_token = users[0]
+        stress_headers = {"Authorization": f"Bearer {stress_token}"}
+        stress_qtys = [1, 2, 3, 4, 5]
+
+        async def stress_add(qty: int) -> httpx.Response:
+            return await client.post(
+                "/api/v1/wishlist/add",
+                headers=stress_headers,
+                json={"request_id": upsert_product_id, "quantity": qty},
+            )
+
+        stress_responses = await asyncio.gather(*[stress_add(q) for q in stress_qtys])
+
+        # a. All 200
+        bad = [(r.status_code, r.text[:120]) for r in stress_responses if r.status_code != 200]
+        if bad:
+            failures.extend(f"UPSERT stress non-200: {c} {b}" for c, b in bad)
+            print(f"  FAIL  non-200 responses: {bad}")
+        else:
+            print(f"  ✓ all {len(stress_qtys)} concurrent UPSERT responses are 200")
+
+        # b + c. Exactly one DB row; final qty in submitted set
+        resp_wl = await client.get("/api/v1/wishlist/my", headers=stress_headers)
+        resp_wl.raise_for_status()
+        upsert_entries = [
+            e for e in resp_wl.json() if e["request_id"] == upsert_product_id
+        ]
+        if len(upsert_entries) != 1:
+            failures.append(
+                f"UPSERT stress: expected 1 DB row, got {len(upsert_entries)}"
+            )
+            print(f"  FAIL  row count: {len(upsert_entries)}")
+        else:
+            final_qty = upsert_entries[0]["quantity"]
+            if final_qty not in stress_qtys:
+                failures.append(
+                    f"UPSERT stress: final qty {final_qty} not in {stress_qtys}"
+                )
+                print(f"  FAIL  unexpected final quantity {final_qty}")
+            else:
+                print(f"  ✓ exactly 1 row; final qty={final_qty} (last writer wins)")
+
+            # d. Redis counter == DB quantity
+            resp_p = await client.get(f"/api/v1/wishlist/progress/{upsert_product_id}")
+            resp_p.raise_for_status()
+            redis_count = resp_p.json()["current"]
+            if redis_count != final_qty:
+                failures.append(
+                    f"UPSERT stress: Redis counter {redis_count} != DB qty {final_qty}"
+                )
+                print(f"  FAIL  Redis={redis_count} DB={final_qty}")
+            else:
+                print(f"  ✓ Redis counter == DB quantity ({redis_count})")
+
     # ── Result summary ────────────────────────────────────────────────────────
     print()
     if failures:

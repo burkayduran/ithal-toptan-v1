@@ -10,6 +10,8 @@ Coverage:
   3. wishlist – add returns 200 and correct WishlistResponse
   4. moq concurrency – threshold transition is atomic (no duplicate side-effects)
   5. SSE – returns 503 if Redis unavailable; otherwise connects and receives ≥1 message
+  6. alembic – raw SQL insert respects server_default values
+  9. same-user UPSERT – concurrent adds yield one DB row; Redis == DB aggregate
 """
 import asyncio
 import uuid
@@ -333,3 +335,71 @@ async def test_raw_sql_insert_respects_server_defaults():
         assert row.is_selected is False, f"Expected False, got {row.is_selected!r}"
 
         await session.rollback()  # Don't persist; clean_tables fixture handles it
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 9. Same-user concurrent UPSERT – one DB row, Redis == DB aggregate
+# ──────────────────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_same_user_concurrent_upsert(client: AsyncClient):
+    """
+    The same user fires N concurrent wishlist adds against the same product_id,
+    each with a different quantity.
+
+    Invariants checked:
+      • The PostgreSQL unique constraint (uq_wishlist_user_request) ensures
+        exactly one row exists for the (user_id, request_id) pair.
+      • All responses are HTTP 200 (UPSERT must never produce a 409).
+      • The final quantity stored in DB is one of the submitted values
+        (last writer wins; any valid outcome is acceptable).
+      • The Redis counter equals the DB quantity after all writes settle.
+    """
+    admin_email = f"admin_{uuid.uuid4().hex[:8]}@test.com"
+    user_email  = f"user_{uuid.uuid4().hex[:8]}@test.com"
+    password    = "pass12345"
+
+    await register_and_login(client, admin_email, password)
+    await make_admin(admin_email)
+    admin_token = await register_and_login(client, admin_email, password)
+
+    # Use a high MoQ so the moq_reached transition never fires during this test
+    product_id = await create_active_product(client, admin_token, moq=50)
+
+    user_token = await register_and_login(client, user_email, password)
+    headers    = {"Authorization": f"Bearer {user_token}"}
+
+    quantities = [1, 2, 3, 4, 5]
+
+    async def add_with_qty(qty: int):
+        return await client.post(
+            "/api/v1/wishlist/add",
+            headers=headers,
+            json={"request_id": product_id, "quantity": qty},
+        )
+
+    responses = await asyncio.gather(*[add_with_qty(q) for q in quantities])
+
+    # All requests must succeed (UPSERT is idempotent – no 409 ever)
+    for resp in responses:
+        assert resp.status_code == 200, resp.text
+
+    # Exactly one DB row for this (user, product) pair
+    wl_resp = await client.get("/api/v1/wishlist/my", headers=headers)
+    assert wl_resp.status_code == 200
+    entries = [e for e in wl_resp.json() if e["request_id"] == product_id]
+    assert len(entries) == 1, f"Expected 1 wishlist row, got {len(entries)}"
+
+    # Final quantity is one of the submitted values (last writer wins)
+    final_qty = entries[0]["quantity"]
+    assert final_qty in quantities, (
+        f"Final quantity {final_qty} is not in submitted set {quantities}"
+    )
+
+    # Redis counter must equal the DB quantity after writes settle
+    progress_resp = await client.get(f"/api/v1/wishlist/progress/{product_id}")
+    assert progress_resp.status_code == 200
+    redis_count = progress_resp.json()["current"]
+    assert redis_count == final_qty, (
+        f"Redis counter {redis_count} != DB quantity {final_qty}"
+    )
