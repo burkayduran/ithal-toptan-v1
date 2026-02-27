@@ -187,6 +187,10 @@ class Payment(Base):
     wishlist_entry: Mapped["WishlistEntry"] = relationship(back_populates="payment")
     user: Mapped["User"] = relationship(back_populates="payments")
 
+    __table_args__ = (
+        UniqueConstraint("wishlist_entry_id", name="uq_payment_wishlist_entry"),
+    )
+
 
 # ─── BatchOrder ───────────────────────────────────────────────────────────────
 

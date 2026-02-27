@@ -421,6 +421,54 @@ async def test_raw_sql_insert_user_category_wishlist_defaults():
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# 7. Refresh token – full rotation cycle + revocation
+# ──────────────────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_refresh_token_flow(client: AsyncClient):
+    """
+    Full refresh-token cycle:
+      register (sets cookie) → POST /refresh (rotates cookie, returns new AT)
+      → use new AT on /me → POST /logout (revokes) → POST /refresh fails 401.
+    """
+    email = f"refresh_{uuid.uuid4().hex[:8]}@test.com"
+    password = "refreshpass123"
+
+    # Register – response must include the refresh_token httpOnly cookie
+    resp = await client.post("/api/v1/auth/register", json={
+        "email": email,
+        "full_name": "Refresh Test",
+        "password": password,
+    })
+    assert resp.status_code == 201, resp.text
+    assert "refresh_token" in resp.cookies, "refresh_token cookie not set on register"
+
+    # Rotate: exchange refresh cookie for a new access token + new cookie
+    resp2 = await client.post("/api/v1/auth/refresh")
+    assert resp2.status_code == 200, resp2.text
+    new_at = resp2.json()["access_token"]
+    assert new_at
+    # Cookie must be refreshed (rotation)
+    assert "refresh_token" in resp2.cookies, "refresh_token cookie not rotated"
+
+    # New access token is valid
+    resp3 = await client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {new_at}"},
+    )
+    assert resp3.status_code == 200, resp3.text
+    assert resp3.json()["email"] == email
+
+    # Logout – server revokes the JTI in Redis and clears the cookie
+    resp4 = await client.post("/api/v1/auth/logout")
+    assert resp4.status_code == 204, resp4.text
+
+    # After logout the refresh cookie is gone; /refresh must return 401
+    resp5 = await client.post("/api/v1/auth/refresh")
+    assert resp5.status_code == 401, resp5.text
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # 9. Same-user concurrent UPSERT – one DB row, Redis == DB aggregate
 # ──────────────────────────────────────────────────────────────────────────────
 

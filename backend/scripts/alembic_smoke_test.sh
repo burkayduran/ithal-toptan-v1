@@ -187,8 +187,8 @@ echo "=== [5/5] Confirming alembic_version ==="
 REVISION=$(psql "${SYNC_URL}" -t -c "SELECT version_num FROM alembic_version;" | tr -d '[:space:]')
 echo "  Current revision: ${REVISION}"
 
-# Acceptable heads: 0001 (initial), 0002 (product/offer defaults), 0003 (all remaining defaults)
-if [[ "${REVISION}" == "0001" || "${REVISION}" == "0002" || "${REVISION}" == "0003" ]]; then
+# Acceptable heads: 0001 (initial), 0002 (product/offer defaults), 0003 (all remaining defaults), 0004 (payments unique)
+if [[ "${REVISION}" == "0001" || "${REVISION}" == "0002" || "${REVISION}" == "0003" || "${REVISION}" == "0004" ]]; then
     echo "  alembic_version is at expected head ✓"
 else
     echo "  UNEXPECTED revision '${REVISION}'" >&2

@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select, and_
 from uuid import UUID
 
-from app.tasks.celery_app import celery_app
+from app.tasks.celery_app import celery_app, run_async
 from app.db.session import AsyncSessionLocal
 from app.models.models import ProductRequest, WishlistEntry
 from app.services.moq_service import MoQService
@@ -20,21 +20,21 @@ def cleanup_expired_entries(request_id: str):
     """
     Cleanup expired entries for a specific product.
     Called 48 hours after MoQ reached.
-    
+
     Args:
         request_id: Product request UUID
     """
-    import asyncio
-    asyncio.run(_cleanup_expired_entries_async(request_id))
+    run_async(_cleanup_expired_entries_async(request_id))
 
 
 async def _cleanup_expired_entries_async(request_id: str):
     """Async implementation of cleanup."""
     request_uuid = UUID(request_id)
-    
+
+    redis_client = aioredis.from_url(
+        settings.REDIS_URL, decode_responses=True, max_connections=5
+    )
     async with AsyncSessionLocal() as db:
-        redis_client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
-        
         try:
             moq_service = MoQService(db, redis_client)
             
@@ -66,8 +66,7 @@ def cleanup_all_expired():
     Cleanup all expired entries.
     Runs every 30 minutes via Celery Beat.
     """
-    import asyncio
-    asyncio.run(_cleanup_all_expired_async())
+    run_async(_cleanup_all_expired_async())
 
 
 async def _cleanup_all_expired_async():

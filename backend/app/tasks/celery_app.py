@@ -1,9 +1,25 @@
 """
 Celery configuration for background tasks
 """
+import asyncio
 from celery import Celery
 from celery.schedules import crontab
 from app.core.config import settings
+
+
+def run_async(coro):
+    """Execute *coro* in a fresh event loop, closing the loop when done.
+
+    Using a fresh loop per Celery task is safe in prefork workers because
+    each worker process has its own Python interpreter with no running loop.
+    The explicit create/close pattern avoids resource leaks that can occur
+    when asyncio.run() is used inside nested coroutines or test harnesses.
+    """
+    loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(coro)
+    finally:
+        loop.close()
 
 # Create Celery app
 celery_app = Celery(

@@ -10,10 +10,16 @@ class Settings(BaseSettings):
 
     # Security
     SECRET_KEY: str
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 10080  # 7 days
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30   # short-lived; clients use refresh tokens
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 30     # long-lived, stored in Redis + httpOnly cookie
     # JWT signing algorithm – declared here so that ALGORITHM=HS256 in .env
     # is accepted rather than rejected as an unknown extra field.
     ALGORITHM: str = "HS256"
+
+    # Rate limiting (overridable per environment; high in tests to avoid false positives)
+    RATE_LIMIT_LOGIN: str = "10/minute"
+    RATE_LIMIT_REGISTER: str = "5/minute"
+    RATE_LIMIT_ADMIN: str = "120/minute"
 
     # Database
     DATABASE_URL: str

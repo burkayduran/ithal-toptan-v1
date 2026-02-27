@@ -3,7 +3,7 @@ Products endpoints - Public & User Product Requests
 """
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, or_
+from sqlalchemy import select, func, or_, update as sql_update
 from typing import List, Optional
 from uuid import UUID
 
@@ -163,9 +163,14 @@ async def get_product(product_id: UUID, db: AsyncSession = Depends(get_db)):
     if product.status not in ["active", "moq_reached", "payment_collecting", "ordered"]:
         raise HTTPException(status_code=404, detail="Product not found")
     
-    # Increment view count
-    product.view_count += 1
+    # Atomic view_count increment – avoids lost updates under concurrent reads
+    await db.execute(
+        sql_update(ProductRequest)
+        .where(ProductRequest.id == product_id)
+        .values(view_count=ProductRequest.view_count + 1)
+    )
     await db.commit()
+    await db.refresh(product)
     
     # Get offer and wishlist data
     offer_result = await db.execute(

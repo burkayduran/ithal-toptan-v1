@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select, and_
 from uuid import UUID
 
-from app.tasks.celery_app import celery_app
+from app.tasks.celery_app import celery_app, run_async
 from app.services.email_service import EmailService
 from app.templates.email_templates import EmailTemplates
 from app.db.session import AsyncSessionLocal
@@ -34,8 +34,7 @@ def send_moq_reached_email(request_id: str, deadline: str):
         request_id: Product request UUID
         deadline: Payment deadline (ISO format)
     """
-    import asyncio
-    asyncio.run(_send_moq_reached_email_async(request_id, deadline))
+    run_async(_send_moq_reached_email_async(request_id, deadline))
 
 
 async def _send_moq_reached_email_async(request_id: str, deadline: str):
@@ -147,8 +146,7 @@ def send_payment_reminders():
     Runs every 6 hours via Celery Beat.
     Sends reminder if < 24 hours remaining.
     """
-    import asyncio
-    asyncio.run(_send_payment_reminders_async())
+    run_async(_send_payment_reminders_async())
 
 
 async def _send_payment_reminders_async():
@@ -261,8 +259,7 @@ def send_payment_success_email(entry_id: str):
     Args:
         entry_id: WishlistEntry UUID
     """
-    import asyncio
-    asyncio.run(_send_payment_success_email_async(entry_id))
+    run_async(_send_payment_success_email_async(entry_id))
 
 
 async def _send_payment_success_email_async(entry_id: str):
@@ -321,8 +318,7 @@ def send_moq_failed_email(request_id: str):
     Args:
         request_id: Product request UUID
     """
-    import asyncio
-    asyncio.run(_send_moq_failed_email_async(request_id))
+    run_async(_send_moq_failed_email_async(request_id))
 
 
 async def _send_moq_failed_email_async(request_id: str):

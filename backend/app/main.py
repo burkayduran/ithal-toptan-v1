@@ -2,6 +2,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from uuid import UUID
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from app.core.limiter import limiter
 
 from app.core.config import settings
 from app.core.redis import create_redis_pool
@@ -10,6 +13,9 @@ from app.api.v1.endpoints import auth, products, wishlist
 from app.api.admin import admin
 from sse_starlette.sse import EventSourceResponse
 import asyncio
+
+# Global rate limiter (key: remote IP)
+limiter = Limiter(key_func=get_remote_address)
 
 
 @asynccontextmanager
@@ -37,8 +43,12 @@ app = FastAPI(
     lifespan=lifespan,
     docs_url="/api/docs",
     redoc_url="/api/redoc",
-    openapi_url="/api/openapi.json"
+    openapi_url="/api/openapi.json",
 )
+
+# Attach limiter so SlowAPI decorators can find it
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # CORS middleware
 app.add_middleware(

@@ -138,6 +138,7 @@ async def add_to_wishlist(
     )
 
     should_notify = False
+    commit_success = False
     try:
         await db.execute(upsert_stmt)
 
@@ -160,33 +161,36 @@ async def add_to_wishlist(
                 await _create_moq_notification_if_missing(db, current_user.id, data.request_id)
 
         await db.commit()
+        commit_success = True
     except IntegrityError:
         await db.rollback()
 
     moq_service = MoQService(db, redis)
 
-    # Fast path: update the Redis counter by the exact quantity delta so that
-    # pub/sub subscribers receive an immediate, accurate value without a full
-    # DB round-trip.  _maybe_sync_counter below heals any drift in strict mode
-    # or on a cache-miss in lazy mode.
-    delta = data.quantity - old_quantity
-    if delta > 0:
-        await moq_service.increment(data.request_id, delta)
-    elif delta < 0:
-        await moq_service.decrement(data.request_id, abs(delta))
+    if commit_success:
+        # Only touch Redis when the DB write actually succeeded.
+        # Fast path: update the counter by the exact delta so pub/sub
+        # subscribers receive an immediate, accurate value without a full
+        # DB round-trip.  _maybe_sync_counter heals any drift in strict
+        # mode or on a cache-miss in lazy mode.
+        delta = data.quantity - old_quantity
+        if delta > 0:
+            await moq_service.increment(data.request_id, delta)
+        elif delta < 0:
+            await moq_service.decrement(data.request_id, abs(delta))
 
-    await _maybe_sync_counter(moq_service, data.request_id, redis)
+        await _maybe_sync_counter(moq_service, data.request_id, redis)
 
-    if should_notify:
-        from app.tasks.email_tasks import send_moq_reached_email
+        if should_notify:
+            from app.tasks.email_tasks import send_moq_reached_email
 
-        send_moq_reached_email.delay(
-            str(data.request_id),
-            initial_deadline.isoformat() if initial_deadline else "",
-        )
+            send_moq_reached_email.delay(
+                str(data.request_id),
+                initial_deadline.isoformat() if initial_deadline else "",
+            )
 
-    if product.status == "active":
-        await moq_service.check_and_trigger(data.request_id)
+        if product.status == "active":
+            await moq_service.check_and_trigger(data.request_id)
 
     row_result = await db.execute(
         select(WishlistEntry, ProductRequest)
@@ -196,7 +200,13 @@ async def add_to_wishlist(
             WishlistEntry.user_id == current_user.id,
         )
     )
-    entry, product_row = row_result.one()
+    row = row_result.one_or_none()
+    if row is None:
+        # DB write failed (IntegrityError) and no prior row exists.
+        # This should not happen in normal operation, but return a clear error
+        # rather than crashing with NoResultFound.
+        raise HTTPException(status_code=409, detail="Concurrent write conflict, please retry")
+    entry, product_row = row
 
     offer_result = await db.execute(
         select(SupplierOffer).where(

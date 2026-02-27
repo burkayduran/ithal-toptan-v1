@@ -329,5 +329,6 @@ return val
 
         await self.db.commit()
 
-        current_count = await self.get_current_count(request_id)
-        await self.redis.set(self._get_counter_key(request_id), current_count, ex=30 * 24 * 3600)
+        # Always sync from DB after reset so Redis reflects the canonical
+        # DB aggregate, not a stale cached value from before the reset.
+        await self.sync_counter_from_db(request_id)
