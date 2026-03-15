@@ -1,0 +1,88 @@
+"use client";
+
+import { useState } from "react";
+import { useRegister } from "@/features/auth/hooks";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Loader2 } from "lucide-react";
+
+interface RegisterFormProps {
+  onSwitchToLogin: () => void;
+}
+
+export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const { mutate: register, isPending, error } = useRegister();
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    register({ email, password, fullName });
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="space-y-1.5">
+        <Label htmlFor="reg-name">Ad Soyad</Label>
+        <Input
+          id="reg-name"
+          type="text"
+          placeholder="Ahmet Yılmaz"
+          value={fullName}
+          onChange={(e) => setFullName(e.target.value)}
+          required
+          autoComplete="name"
+        />
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="reg-email">E-posta</Label>
+        <Input
+          id="reg-email"
+          type="email"
+          placeholder="ornek@email.com"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+          autoComplete="email"
+        />
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="reg-password">Şifre</Label>
+        <Input
+          id="reg-password"
+          type="password"
+          placeholder="En az 6 karakter"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+          minLength={6}
+          autoComplete="new-password"
+        />
+      </div>
+
+      {error && (
+        <p className="text-sm text-red-600">{(error as Error).message}</p>
+      )}
+
+      <Button type="submit" className="w-full" disabled={isPending}>
+        {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+        Hesap Oluştur
+      </Button>
+
+      <p className="text-center text-sm text-gray-500">
+        Zaten hesabınız var mı?{" "}
+        <button
+          type="button"
+          className="text-blue-600 font-medium hover:underline"
+          onClick={onSwitchToLogin}
+        >
+          Giriş Yap
+        </button>
+      </p>
+    </form>
+  );
+}
