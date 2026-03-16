@@ -7,16 +7,18 @@ interface TimeLeft {
   days: number;
   hours: number;
   minutes: number;
+  seconds: number;
   expired: boolean;
 }
 
 function getTimeLeft(deadline: string): TimeLeft {
   const diff = new Date(deadline).getTime() - Date.now();
-  if (diff <= 0) return { days: 0, hours: 0, minutes: 0, expired: true };
+  if (diff <= 0) return { days: 0, hours: 0, minutes: 0, seconds: 0, expired: true };
   return {
     days: Math.floor(diff / (1000 * 60 * 60 * 24)),
     hours: Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)),
     minutes: Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60)),
+    seconds: Math.floor((diff % (1000 * 60)) / 1000),
     expired: false,
   };
 }
@@ -33,10 +35,12 @@ export default function CountdownBlock({
   compact = false,
   className,
 }: CountdownBlockProps) {
-  const [timeLeft, setTimeLeft] = useState<TimeLeft>(getTimeLeft(deadline));
+  const [timeLeft, setTimeLeft] = useState<TimeLeft>(() => getTimeLeft(deadline));
 
   useEffect(() => {
-    const id = setInterval(() => setTimeLeft(getTimeLeft(deadline)), 60_000);
+    // Initialize immediately with fresh value in case of SSR hydration drift
+    setTimeLeft(getTimeLeft(deadline));
+    const id = setInterval(() => setTimeLeft(getTimeLeft(deadline)), 1_000);
     return () => clearInterval(id);
   }, [deadline]);
 
@@ -55,7 +59,7 @@ export default function CountdownBlock({
   }
 
   if (compact) {
-    const parts = [];
+    const parts: string[] = [];
     if (timeLeft.days > 0) parts.push(`${timeLeft.days}g`);
     parts.push(`${String(timeLeft.hours).padStart(2, "0")}s`);
     parts.push(`${String(timeLeft.minutes).padStart(2, "0")}d`);
@@ -75,15 +79,27 @@ export default function CountdownBlock({
   }
 
   const isUrgent = timeLeft.days === 0 && timeLeft.hours < 6;
-  const colorClass = isUrgent ? "text-red-700 bg-red-50 border-red-200" : "text-orange-700 bg-orange-50 border-orange-200";
+  const colorClass = isUrgent
+    ? "text-red-700 bg-red-50 border-red-200"
+    : "text-orange-700 bg-orange-50 border-orange-200";
 
-  return (
-    <div className={cn("flex items-center gap-3", className)}>
-      {[
+  // Show seconds unit only when less than 1 hour remains to avoid visual noise
+  const showSeconds = timeLeft.days === 0 && timeLeft.hours === 0;
+
+  const units = showSeconds
+    ? [
+        { value: timeLeft.minutes, label: "Dakika" },
+        { value: timeLeft.seconds, label: "Saniye" },
+      ]
+    : [
         { value: timeLeft.days, label: "Gün" },
         { value: timeLeft.hours, label: "Saat" },
         { value: timeLeft.minutes, label: "Dakika" },
-      ].map(({ value, label }) => (
+      ];
+
+  return (
+    <div className={cn("flex items-center gap-3", className)}>
+      {units.map(({ value, label }) => (
         <div
           key={label}
           className={cn(

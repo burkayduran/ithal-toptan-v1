@@ -10,49 +10,38 @@ interface StatusBadgeProps {
   className?: string;
 }
 
-const STYLES: Record<string, string> = {
+interface StatusMeta {
+  label: string;
+  className: string;
+}
+
+const STATUS_META: Record<string, StatusMeta> = {
   // Product statuses
-  active: "bg-green-100 text-green-800 border-green-200",
-  moq_reached: "bg-blue-100 text-blue-800 border-blue-200",
-  payment_collecting: "bg-amber-100 text-amber-800 border-amber-200",
-  ordered: "bg-purple-100 text-purple-800 border-purple-200",
-  delivered: "bg-gray-100 text-gray-700 border-gray-200",
-  cancelled: "bg-red-100 text-red-700 border-red-200",
-  pending: "bg-yellow-100 text-yellow-800 border-yellow-200",
-  sourcing: "bg-orange-100 text-orange-800 border-orange-200",
+  active:              { label: "Aktif",               className: "bg-green-100 text-green-800 border-green-200" },
+  moq_reached:         { label: "Hedef Doldu",         className: "bg-blue-100 text-blue-800 border-blue-200" },
+  payment_collecting:  { label: "Ödeme Toplanıyor",    className: "bg-amber-100 text-amber-800 border-amber-200" },
+  ordered:             { label: "Sipariş Verildi",     className: "bg-purple-100 text-purple-800 border-purple-200" },
+  delivered:           { label: "Teslim Edildi",       className: "bg-gray-100 text-gray-700 border-gray-200" },
+  cancelled:           { label: "İptal Edildi",        className: "bg-red-100 text-red-700 border-red-200" },
+  pending:             { label: "Beklemede",           className: "bg-yellow-100 text-yellow-800 border-yellow-200" },
+  sourcing:            { label: "Tedarik Ediliyor",    className: "bg-orange-100 text-orange-800 border-orange-200" },
   // Wishlist entry statuses
-  waiting: "bg-blue-50 text-blue-700 border-blue-200",
-  notified: "bg-amber-100 text-amber-800 border-amber-200",
-  paid: "bg-green-100 text-green-800 border-green-200",
-  expired: "bg-red-100 text-red-700 border-red-200",
+  waiting:             { label: "Beklemede",           className: "bg-blue-50 text-blue-700 border-blue-200" },
+  notified:            { label: "Ödeme Gerekli",       className: "bg-amber-100 text-amber-800 border-amber-200" },
+  paid:                { label: "Ödendi",              className: "bg-green-100 text-green-800 border-green-200" },
+  expired:             { label: "Süresi Doldu",        className: "bg-red-100 text-red-700 border-red-200" },
 };
 
-const LABELS: Record<string, string> = {
-  // Product statuses
-  active: "Aktif",
-  moq_reached: "Hedef Doldu",
-  payment_collecting: "Ödeme Toplanıyor",
-  ordered: "Sipariş Verildi",
-  delivered: "Teslim Edildi",
-  cancelled: "İptal Edildi",
-  pending: "Beklemede",
-  sourcing: "Tedarik Ediliyor",
-  // Wishlist entry statuses
-  waiting: "Beklemede",
-  notified: "Ödeme Gerekli",
-  paid: "Ödendi",
-  expired: "Süresi Doldu",
-};
+const FALLBACK: StatusMeta = { label: "", className: "bg-gray-100 text-gray-600 border-gray-200" };
 
 export default function StatusBadge({ status, className }: StatusBadgeProps) {
-  const styles = STYLES[status] ?? "bg-gray-100 text-gray-600 border-gray-200";
-  const label = LABELS[status] ?? status;
+  const { label, className: metaClass } = STATUS_META[status] ?? { ...FALLBACK, label: status };
 
   return (
     <span
       className={cn(
         "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border",
-        styles,
+        metaClass,
         className
       )}
     >

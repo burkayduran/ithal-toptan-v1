@@ -21,8 +21,13 @@ export function useJoinWishlist() {
       request_id: string;
       quantity: number;
     }) => addToWishlist(request_id, quantity),
-    onSuccess: () => {
+    onSuccess: (data) => {
+      // Wishlist list reflects the new entry immediately
       queryClient.invalidateQueries({ queryKey: ["wishlist"] });
+      // The joined product's current_wishlist_count / moq_fill_percentage changed
+      queryClient.invalidateQueries({ queryKey: ["product", data.request_id] });
+      // Product list cards also show live counts
+      queryClient.invalidateQueries({ queryKey: ["products"] });
     },
   });
 }
@@ -31,8 +36,11 @@ export function useRemoveFromWishlist() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (request_id: string) => removeFromWishlist(request_id),
-    onSuccess: () => {
+    onSuccess: (_data, request_id) => {
       queryClient.invalidateQueries({ queryKey: ["wishlist"] });
+      // Count decreased — keep product detail fresh
+      queryClient.invalidateQueries({ queryKey: ["product", request_id] });
+      queryClient.invalidateQueries({ queryKey: ["products"] });
     },
   });
 }

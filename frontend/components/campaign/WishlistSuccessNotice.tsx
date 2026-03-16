@@ -15,7 +15,8 @@ export default function WishlistSuccessNotice({ quantity, campaignTitle }: Wishl
         <div>
           <p className="font-semibold text-green-800">Bekleme listesine katıldınız!</p>
           <p className="text-sm text-green-700 mt-0.5">
-            <strong>{quantity} adet</strong> için kaydınız alındı. MOQ dolduğunda sizi bilgilendireceğiz.
+            <strong>{campaignTitle}</strong> için <strong>{quantity} adet</strong> kaydınız alındı.
+            MOQ dolduğunda sizi bilgilendireceğiz.
           </p>
         </div>
       </div>

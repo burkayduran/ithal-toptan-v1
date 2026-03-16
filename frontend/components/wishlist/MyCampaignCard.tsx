@@ -1,10 +1,12 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
 import { WishlistEntry } from "@/features/wishlist/types";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import StatusBadge from "@/components/campaign/StatusBadge";
 import CountdownBlock from "@/components/campaign/CountdownBlock";
-import ProgressBlock from "@/components/campaign/ProgressBlock";
 import { formatCurrency } from "@/lib/utils/formatCurrency";
 import { useRemoveFromWishlist } from "@/features/wishlist/hooks";
 import { Loader2, Trash2 } from "lucide-react";
@@ -61,15 +63,18 @@ export default function MyCampaignCard({ entry }: MyCampaignCardProps) {
         </div>
       </div>
 
-      {/* Middle: progress or countdown */}
-      {entry.status === "waiting" &&
-        entry.moq_fill_percentage != null && (
-          <ProgressBlock
-            currentCount={entry.moq_fill_percentage}
-            targetCount={100}
-            compact
-          />
-        )}
+      {/* Middle: MOQ fill percentage bar (waiting) or payment countdown (notified) */}
+      {entry.status === "waiting" && entry.moq_fill_percentage != null && (
+        <div className="space-y-1">
+          <div className="flex justify-between text-xs">
+            <span className="text-gray-500">Hedef dolum</span>
+            <span className="font-semibold text-gray-700">
+              {entry.moq_fill_percentage}%
+            </span>
+          </div>
+          <Progress value={entry.moq_fill_percentage} className="h-1.5" />
+        </div>
+      )}
 
       {entry.status === "notified" && entry.payment_deadline && (
         <div className="flex items-center gap-2 text-xs text-gray-500">
