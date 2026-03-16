@@ -1,25 +1,39 @@
-import { CampaignStatus } from "@/features/campaigns/types";
+import { ProductStatus } from "@/features/campaigns/types";
 
-export function getStatusLabel(status: CampaignStatus): string {
+export function getStatusLabel(status: ProductStatus): string {
   switch (status) {
     case "active":
       return "Aktif";
     case "moq_reached":
       return "Hedef Doldu";
-    case "closed":
-      return "Kapandı";
+    case "ordered":
+      return "Sipariş Verildi";
+    case "delivered":
+      return "Teslim Edildi";
+    case "cancelled":
+      return "İptal Edildi";
+    case "pending":
+      return "Beklemede";
+    case "sourcing":
+      return "Tedarik Ediliyor";
+    default:
+      return status;
   }
 }
 
 export function getStatusVariant(
-  status: CampaignStatus
+  status: ProductStatus
 ): "default" | "secondary" | "destructive" | "outline" {
   switch (status) {
     case "active":
       return "default";
     case "moq_reached":
+    case "ordered":
+    case "delivered":
       return "secondary";
-    case "closed":
+    case "cancelled":
+      return "destructive";
+    default:
       return "outline";
   }
 }

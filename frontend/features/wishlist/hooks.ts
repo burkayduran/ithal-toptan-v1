@@ -1,10 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { joinWishlist, getWishlist } from "./api";
+import { addToWishlist, getMyWishlist } from "./api";
+import { useAuthStore } from "@/features/auth/store";
 
 export function useWishlist() {
+  const { token, isHydrated } = useAuthStore();
   return useQuery({
     queryKey: ["wishlist"],
-    queryFn: getWishlist,
+    queryFn: getMyWishlist,
+    // Only run once auth state is resolved and user is logged in
+    enabled: isHydrated && !!token,
   });
 }
 
@@ -12,17 +16,14 @@ export function useJoinWishlist() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({
-      requestId,
-      campaignSlug,
+      request_id,
       quantity,
     }: {
-      requestId: string;
-      campaignSlug: string;
+      request_id: string;
       quantity: number;
-    }) => joinWishlist(requestId, campaignSlug, quantity),
+    }) => addToWishlist(request_id, quantity),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["wishlist"] });
-      queryClient.invalidateQueries({ queryKey: ["my-campaigns"] });
     },
   });
 }

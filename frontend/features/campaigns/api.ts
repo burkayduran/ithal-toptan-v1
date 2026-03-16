@@ -1,21 +1,23 @@
-import { Campaign } from "./types";
-import { mockCampaigns } from "./mock";
+import { api } from "@/lib/api/client";
+import { Product } from "./types";
 
-const delay = (ms = 400) => new Promise((r) => setTimeout(r, ms));
-
-export async function getCampaigns(): Promise<Campaign[]> {
-  await delay();
-  return mockCampaigns;
+interface ListParams {
+  category_id?: string;
+  search?: string;
+  page?: number;
+  per_page?: number;
 }
 
-export async function getCampaignBySlug(slug: string): Promise<Campaign> {
-  await delay();
-  const campaign = mockCampaigns.find((c) => c.slug === slug);
-  if (!campaign) throw new Error("Kampanya bulunamadı.");
-  return campaign;
+export async function getProducts(params?: ListParams): Promise<Product[]> {
+  const qs = new URLSearchParams();
+  if (params?.category_id) qs.set("category_id", params.category_id);
+  if (params?.search) qs.set("search", params.search);
+  if (params?.page != null) qs.set("page", String(params.page));
+  if (params?.per_page != null) qs.set("per_page", String(params.per_page));
+  const query = qs.toString();
+  return api.get<Product[]>(`/api/v1/products${query ? `?${query}` : ""}`);
 }
 
-export async function getMyCampaigns(wishlistIds: string[]): Promise<Campaign[]> {
-  await delay(200);
-  return mockCampaigns.filter((c) => wishlistIds.includes(c.id));
+export async function getProductById(id: string): Promise<Product> {
+  return api.get<Product>(`/api/v1/products/${id}`);
 }

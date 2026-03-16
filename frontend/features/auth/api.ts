@@ -1,22 +1,14 @@
-import { User, LoginPayload, RegisterPayload } from "./types";
-import { mockLogin, mockRegister, getMockCurrentUser, mockLogout } from "./mock";
+import { api } from "@/lib/api/client";
+import { AuthToken, User, LoginPayload, RegisterPayload } from "./types";
 
-const delay = (ms = 500) => new Promise((r) => setTimeout(r, ms));
-
-export async function login(payload: LoginPayload): Promise<User> {
-  await delay();
-  return mockLogin(payload.email, payload.password);
+export async function login(payload: LoginPayload): Promise<AuthToken> {
+  return api.post<AuthToken>("/api/v1/auth/login", payload);
 }
 
-export async function register(payload: RegisterPayload): Promise<User> {
-  await delay();
-  return mockRegister(payload.email, payload.password, payload.fullName);
+export async function register(payload: RegisterPayload): Promise<AuthToken> {
+  return api.post<AuthToken>("/api/v1/auth/register", payload);
 }
 
-export async function getCurrentUser(): Promise<User | null> {
-  return getMockCurrentUser();
-}
-
-export async function logout(): Promise<void> {
-  mockLogout();
+export async function getMe(): Promise<User> {
+  return api.get<User>("/api/v1/auth/me");
 }

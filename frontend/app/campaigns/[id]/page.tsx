@@ -1,7 +1,7 @@
 "use client";
 
 import { use } from "react";
-import { useCampaign, useCampaigns } from "@/features/campaigns/hooks";
+import { useProduct, useProducts } from "@/features/campaigns/hooks";
 import PageContainer from "@/components/layout/PageContainer";
 import CampaignGallery from "@/components/campaign/CampaignGallery";
 import CampaignHeader from "@/components/campaign/CampaignHeader";
@@ -21,7 +21,7 @@ const FAQ_ITEMS = [
   },
   {
     q: "MOQ dolmazsa ne olur?",
-    a: "Kampanya hedef süresinde dolmazsa, kayıt iptal edilir ve herhangi bir ücret alınmaz.",
+    a: "Kampanya hedef süresinde dolmazsa kayıt iptal edilir ve herhangi bir ücret alınmaz.",
   },
   {
     q: "Ürünü iade edebilir miyim?",
@@ -29,25 +29,25 @@ const FAQ_ITEMS = [
   },
   {
     q: "Teslimat ne kadar sürer?",
-    a: "Her kampanya sayfasında tahmini teslimat tarihi belirtilmektedir.",
+    a: "Her kampanya sayfasında tahmini teslimat süresi belirtilmektedir.",
   },
 ];
 
 export default function CampaignDetailPage({
   params,
 }: {
-  params: Promise<{ slug: string }>;
+  params: Promise<{ id: string }>;
 }) {
-  const { slug } = use(params);
-  const { data: campaign, isLoading, isError, refetch } = useCampaign(slug);
-  const { data: allCampaigns } = useCampaigns();
+  const { id } = use(params);
+  const { data: product, isLoading, isError, refetch } = useProduct(id);
+  const { data: allProducts } = useProducts();
 
-  const similarCampaigns = allCampaigns
-    ?.filter((c) => c.slug !== slug && c.status === "active")
+  const similarProducts = allProducts
+    ?.filter((p) => p.id !== id && p.status === "active")
     .slice(0, 3) ?? [];
 
   if (isLoading) return <LoadingState />;
-  if (isError || !campaign) {
+  if (isError || !product) {
     return (
       <PageContainer>
         <ErrorState
@@ -58,6 +58,10 @@ export default function CampaignDetailPage({
     );
   }
 
+  const PLACEHOLDER_IMG =
+    "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&q=80";
+  const images = product.images?.length > 0 ? product.images : [PLACEHOLDER_IMG];
+
   return (
     <PageContainer>
       {/* Breadcrumb */}
@@ -67,24 +71,26 @@ export default function CampaignDetailPage({
           Ana Sayfa
         </Link>
         <ChevronRight className="h-3.5 w-3.5" />
-        <Link href="/" className="hover:text-gray-700">Kampanyalar</Link>
+        <Link href="/" className="hover:text-gray-700">
+          Kampanyalar
+        </Link>
         <ChevronRight className="h-3.5 w-3.5" />
-        <span className="text-gray-900 font-medium line-clamp-1">{campaign.title}</span>
+        <span className="text-gray-900 font-medium line-clamp-1">{product.title}</span>
       </nav>
 
       {/* Main layout: gallery + details */}
       <div className="grid lg:grid-cols-2 gap-10 lg:gap-16 mb-16">
-        <CampaignGallery images={campaign.images} title={campaign.title} />
+        <CampaignGallery images={images} title={product.title} />
 
         <div className="space-y-6">
-          <CampaignHeader campaign={campaign} />
-          <JoinPanel campaign={campaign} />
+          <CampaignHeader product={product} />
+          <JoinPanel product={product} />
         </div>
       </div>
 
       <Separator className="my-10" />
 
-      {/* How it works (inline) */}
+      {/* How it works */}
       <section className="mb-14">
         <SectionHeader title="Nasıl Çalışır?" />
         <ol className="space-y-4">
@@ -117,10 +123,10 @@ export default function CampaignDetailPage({
       </section>
 
       {/* Similar campaigns */}
-      {similarCampaigns.length > 0 && (
+      {similarProducts.length > 0 && (
         <section>
           <SectionHeader title="Benzer Kampanyalar" />
-          <CampaignGrid campaigns={similarCampaigns} />
+          <CampaignGrid products={similarProducts} />
         </section>
       )}
     </PageContainer>

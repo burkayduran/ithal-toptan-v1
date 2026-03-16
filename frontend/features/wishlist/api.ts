@@ -1,23 +1,17 @@
+import { api } from "@/lib/api/client";
 import { WishlistEntry } from "./types";
-import { addToMockWishlist, getMockWishlist } from "./mock";
 
-const delay = (ms = 600) => new Promise((r) => setTimeout(r, ms));
-
-export async function joinWishlist(requestId: string, campaignSlug: string, quantity: number): Promise<WishlistEntry> {
-  await delay();
-  const entry: WishlistEntry = {
-    id: `wl_${Date.now()}`,
-    requestId,
-    campaignSlug,
-    quantity,
-    status: "waiting",
-    joinedAt: new Date().toISOString(),
-  };
-  addToMockWishlist(entry);
-  return entry;
+export async function getMyWishlist(): Promise<WishlistEntry[]> {
+  return api.get<WishlistEntry[]>("/api/v1/wishlist/my");
 }
 
-export async function getWishlist(): Promise<WishlistEntry[]> {
-  await delay(200);
-  return getMockWishlist();
+export async function addToWishlist(
+  request_id: string,
+  quantity: number
+): Promise<WishlistEntry> {
+  return api.post<WishlistEntry>("/api/v1/wishlist/add", { request_id, quantity });
+}
+
+export async function removeFromWishlist(request_id: string): Promise<void> {
+  return api.delete(`/api/v1/wishlist/${request_id}`);
 }

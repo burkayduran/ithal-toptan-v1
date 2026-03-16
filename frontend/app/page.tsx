@@ -1,7 +1,6 @@
 "use client";
 
-import Link from "next/link";
-import { useCampaigns } from "@/features/campaigns/hooks";
+import { useProducts } from "@/features/campaigns/hooks";
 import { Button } from "@/components/ui/button";
 import PageContainer from "@/components/layout/PageContainer";
 import SectionHeader from "@/components/common/SectionHeader";
@@ -9,16 +8,20 @@ import CampaignGrid from "@/components/campaign/CampaignGrid";
 import CampaignCard from "@/components/campaign/CampaignCard";
 import LoadingState from "@/components/common/LoadingState";
 import ErrorState from "@/components/common/ErrorState";
+import EmptyState from "@/components/common/EmptyState";
 import { ArrowRight, Package, Users, CreditCard, Zap } from "lucide-react";
 
 export default function HomePage() {
-  const { data: campaigns, isLoading, isError, refetch } = useCampaigns();
+  const { data: products, isLoading, isError, refetch } = useProducts();
 
-  const activeCampaigns = campaigns?.filter((c) => c.status === "active") ?? [];
-  const nearUnlock = campaigns?.filter(
-    (c) => c.status === "active" && c.currentCount / c.targetCount >= 0.6
-  ) ?? [];
-  const featured = activeCampaigns[0];
+  const activeProducts = products?.filter((p) => p.status === "active") ?? [];
+
+  // "Near unlock" = active products where moq_fill_percentage >= 60
+  const nearUnlock = activeProducts.filter(
+    (p) => (p.moq_fill_percentage ?? 0) >= 60
+  );
+
+  const featured = activeProducts[0];
 
   return (
     <>
@@ -29,31 +32,33 @@ export default function HomePage() {
             <div className="space-y-6">
               <div className="inline-flex items-center gap-2 bg-white/10 text-white/90 text-sm px-3 py-1.5 rounded-full font-medium">
                 <Zap className="h-3.5 w-3.5 text-yellow-300" />
-                Grup alımıyla %40–60 tasarruf
+                Grup alımıyla toptan fiyat
               </div>
               <h1 className="text-4xl sm:text-5xl font-extrabold leading-tight">
-                Premium Ürünleri<br />
+                Premium Ürünleri
+                <br />
                 <span className="text-yellow-300">Toptan Fiyatına</span> Alın
               </h1>
               <p className="text-blue-100 text-lg leading-relaxed max-w-md">
                 Yeterli kişi bekleme listesine katıldığında siparişiniz onaylanır.
                 Ödeme yalnızca MOQ dolduğunda alınır.
               </p>
-              <div className="flex gap-3 flex-wrap">
-                <a href="#campaigns">
-                  <Button size="lg" className="bg-white text-blue-700 hover:bg-blue-50 gap-2 font-semibold">
-                    Kampanyalara Göz At
-                    <ArrowRight className="h-4 w-4" />
-                  </Button>
-                </a>
-              </div>
+              <a href="#campaigns">
+                <Button
+                  size="lg"
+                  className="bg-white text-blue-700 hover:bg-blue-50 gap-2 font-semibold"
+                >
+                  Kampanyalara Göz At
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+              </a>
             </div>
 
-            {/* Featured campaign card preview */}
+            {/* Featured campaign card */}
             {featured && (
               <div className="hidden lg:flex justify-end">
                 <div className="w-80">
-                  <CampaignCard campaign={featured} />
+                  <CampaignCard product={featured} />
                 </div>
               </div>
             )}
@@ -64,7 +69,9 @@ export default function HomePage() {
       {/* How it works */}
       <section className="bg-gray-50 border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14">
-          <h2 className="text-center text-xl font-bold text-gray-900 mb-10">Nasıl Çalışır?</h2>
+          <h2 className="text-center text-xl font-bold text-gray-900 mb-10">
+            Nasıl Çalışır?
+          </h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {[
               {
@@ -103,33 +110,36 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Campaign sections */}
+      {/* Campaign listings */}
       <PageContainer>
         <div id="campaigns">
           {isLoading ? (
             <LoadingState />
           ) : isError ? (
             <ErrorState onRetry={() => refetch()} />
+          ) : activeProducts.length === 0 ? (
+            <EmptyState
+              title="Şu an aktif kampanya bulunmuyor"
+              description="Yeni kampanyalar için daha sonra tekrar kontrol edin."
+            />
           ) : (
             <div className="space-y-14">
-              {/* Near unlock */}
               {nearUnlock.length > 0 && (
                 <section>
                   <SectionHeader
                     title="🔥 Hedefe Yakın"
                     subtitle="Bu kampanyalar hızla dolmak üzere – hemen katılın!"
                   />
-                  <CampaignGrid campaigns={nearUnlock} />
+                  <CampaignGrid products={nearUnlock} />
                 </section>
               )}
 
-              {/* All active campaigns */}
               <section>
                 <SectionHeader
                   title="Aktif Kampanyalar"
                   subtitle="Şu an katılabileceğiniz tüm grup alımları."
                 />
-                <CampaignGrid campaigns={activeCampaigns} />
+                <CampaignGrid products={activeProducts} />
               </section>
             </div>
           )}

@@ -1,17 +1,32 @@
-export type CampaignStatus = "active" | "moq_reached" | "closed";
+/** Matches backend ProductRequest status values */
+export type ProductStatus =
+  | "pending"
+  | "sourcing"
+  | "active"
+  | "moq_reached"
+  | "ordered"
+  | "delivered"
+  | "cancelled";
 
-export interface Campaign {
+/** Matches backend ProductResponse */
+export interface Product {
   id: string;
-  slug: string;
   title: string;
-  description: string;
+  description: string | null;
+  category_id: string | null;
   images: string[];
-  status: CampaignStatus;
-  groupPrice: number;
-  retailPrice: number;
-  currentCount: number;
-  targetCount: number;
-  etaText: string;
-  category: string;
-  shortSpecs?: string[];
+  status: ProductStatus;
+  view_count: number;
+  created_at: string;
+  activated_at: string | null;
+  /** Minimum order quantity required to unlock the group buy */
+  moq: number | null;
+  /** Group buy price in Turkish Lira */
+  selling_price_try: number | null;
+  /** Estimated delivery lead time in days */
+  lead_time_days: number | null;
+  /** Total wishlist quantity currently committed */
+  current_wishlist_count: number | null;
+  /** Percentage of MOQ filled (0-100) */
+  moq_fill_percentage: number | null;
 }

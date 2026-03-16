@@ -1,25 +1,17 @@
 import { useQuery } from "@tanstack/react-query";
-import { getCampaigns, getCampaignBySlug, getMyCampaigns } from "./api";
+import { getProducts, getProductById } from "./api";
 
-export function useCampaigns() {
+export function useProducts() {
   return useQuery({
-    queryKey: ["campaigns"],
-    queryFn: getCampaigns,
+    queryKey: ["products"],
+    queryFn: () => getProducts(),
   });
 }
 
-export function useCampaign(slug: string) {
+export function useProduct(id: string) {
   return useQuery({
-    queryKey: ["campaign", slug],
-    queryFn: () => getCampaignBySlug(slug),
-    enabled: !!slug,
-  });
-}
-
-export function useMyCampaigns(wishlistIds: string[]) {
-  return useQuery({
-    queryKey: ["my-campaigns", wishlistIds],
-    queryFn: () => getMyCampaigns(wishlistIds),
-    enabled: wishlistIds.length > 0,
+    queryKey: ["product", id],
+    queryFn: () => getProductById(id),
+    enabled: !!id,
   });
 }

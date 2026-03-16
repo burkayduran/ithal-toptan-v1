@@ -1,20 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { Campaign } from "@/features/campaigns/types";
+import { Product } from "@/features/campaigns/types";
 import { useAuthStore } from "@/features/auth/store";
 import { useJoinWishlist } from "@/features/wishlist/hooks";
 import { Button } from "@/components/ui/button";
+import ProgressBlock from "./ProgressBlock";
 import WishlistQuantitySelector from "./WishlistQuantitySelector";
 import WishlistSuccessNotice from "./WishlistSuccessNotice";
-import ProgressBlock from "./ProgressBlock";
 import { Loader2, ShoppingCart } from "lucide-react";
 
 interface JoinPanelProps {
-  campaign: Campaign;
+  product: Product;
 }
 
-export default function JoinPanel({ campaign }: JoinPanelProps) {
+export default function JoinPanel({ product }: JoinPanelProps) {
   const [quantity, setQuantity] = useState(1);
   const [joined, setJoined] = useState(false);
   const { user, openAuthModal } = useAuthStore();
@@ -22,10 +22,10 @@ export default function JoinPanel({ campaign }: JoinPanelProps) {
 
   const handleJoin = () => {
     if (!user) {
-      // Defer join until after auth
+      // Defer join action until after successful auth
       openAuthModal(() => {
         joinWishlist(
-          { requestId: campaign.id, campaignSlug: campaign.slug, quantity },
+          { request_id: product.id, quantity },
           { onSuccess: () => setJoined(true) }
         );
       });
@@ -33,20 +33,28 @@ export default function JoinPanel({ campaign }: JoinPanelProps) {
     }
 
     joinWishlist(
-      { requestId: campaign.id, campaignSlug: campaign.slug, quantity },
+      { request_id: product.id, quantity },
       { onSuccess: () => setJoined(true) }
     );
   };
 
   if (joined) {
-    return <WishlistSuccessNotice quantity={quantity} campaignTitle={campaign.title} />;
+    return <WishlistSuccessNotice quantity={quantity} campaignTitle={product.title} />;
   }
+
+  const canShowProgress =
+    product.moq != null && product.current_wishlist_count != null;
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-5 space-y-5">
-      <ProgressBlock currentCount={campaign.currentCount} targetCount={campaign.targetCount} />
+      {canShowProgress && (
+        <ProgressBlock
+          currentCount={product.current_wishlist_count!}
+          targetCount={product.moq!}
+        />
+      )}
 
-      {campaign.status === "active" ? (
+      {product.status === "active" ? (
         <>
           <WishlistQuantitySelector quantity={quantity} onChange={setQuantity} />
 
@@ -74,14 +82,23 @@ export default function JoinPanel({ campaign }: JoinPanelProps) {
             Ödeme yalnızca MOQ dolduğunda talep edilir.
           </p>
         </>
-      ) : campaign.status === "moq_reached" ? (
+      ) : product.status === "moq_reached" ? (
         <div className="text-center py-3">
           <p className="font-semibold text-blue-700">Hedef doldu!</p>
           <p className="text-sm text-gray-500 mt-1">Ödeme bildirimi bekleniyor.</p>
         </div>
+      ) : product.status === "ordered" ? (
+        <div className="text-center py-3">
+          <p className="font-semibold text-purple-700">Sipariş verildi</p>
+          <p className="text-sm text-gray-500 mt-1">Ürün tedarik aşamasında.</p>
+        </div>
+      ) : product.status === "delivered" ? (
+        <div className="text-center py-3">
+          <p className="font-semibold text-gray-700">Teslim edildi</p>
+        </div>
       ) : (
         <div className="text-center py-3">
-          <p className="text-sm text-gray-500">Bu kampanya kapanmıştır.</p>
+          <p className="text-sm text-gray-500">Bu kampanya şu an aktif değil.</p>
         </div>
       )}
     </div>

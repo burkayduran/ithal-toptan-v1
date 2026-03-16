@@ -12,14 +12,14 @@ interface RegisterFormProps {
 }
 
 export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
-  const [fullName, setFullName] = useState("");
+  const [full_name, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const { mutate: register, isPending, error } = useRegister();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    register({ email, password, fullName });
+    register({ email, password, full_name });
   };
 
   return (
@@ -30,7 +30,7 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
           id="reg-name"
           type="text"
           placeholder="Ahmet Yılmaz"
-          value={fullName}
+          value={full_name}
           onChange={(e) => setFullName(e.target.value)}
           required
           autoComplete="name"
@@ -65,7 +65,9 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
       </div>
 
       {error && (
-        <p className="text-sm text-red-600">{(error as Error).message}</p>
+        <p className="text-sm text-red-600 rounded-md bg-red-50 px-3 py-2">
+          {(error as Error).message}
+        </p>
       )}
 
       <Button type="submit" className="w-full" disabled={isPending}>

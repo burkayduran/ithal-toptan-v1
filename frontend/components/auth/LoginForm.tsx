@@ -50,7 +50,9 @@ export default function LoginForm({ onSwitchToRegister }: LoginFormProps) {
       </div>
 
       {error && (
-        <p className="text-sm text-red-600">{(error as Error).message}</p>
+        <p className="text-sm text-red-600 rounded-md bg-red-50 px-3 py-2">
+          {(error as Error).message}
+        </p>
       )}
 
       <Button type="submit" className="w-full" disabled={isPending}>
@@ -67,11 +69,6 @@ export default function LoginForm({ onSwitchToRegister }: LoginFormProps) {
         >
           Kayıt Ol
         </button>
-      </p>
-
-      {/* Demo hint */}
-      <p className="text-center text-xs text-gray-400 border-t pt-3">
-        Demo: demo@ithal.com / demo123
       </p>
     </form>
   );
