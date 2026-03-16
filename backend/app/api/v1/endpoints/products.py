@@ -74,7 +74,7 @@ async def create_product_request(
 # AKTİF ÜRÜNLER (Public)
 # ════════════════════════════════════════════════════════════════════════════
 
-@router.get("/", response_model=List[ProductResponse])
+@router.get("", response_model=List[ProductResponse])
 async def list_products(
     category_id: Optional[UUID] = None,
     search: Optional[str] = None,

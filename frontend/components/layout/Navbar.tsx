@@ -11,18 +11,15 @@ export default function Navbar() {
   const { user, isHydrated, hydrate, logout, openAuthModal } = useAuthStore();
   const queryClient = useQueryClient();
 
-  // Hydrate auth state once on mount (async – fetches /auth/me if token exists)
   useEffect(() => {
     hydrate();
   }, [hydrate]);
 
   const handleLogout = () => {
     logout();
-    // Clear protected cached data so stale wishlist data is not shown
     queryClient.removeQueries({ queryKey: ["wishlist"] });
   };
 
-  // Derive display name: prefer full_name, fall back to email prefix
   const displayName = user
     ? (user.full_name?.split(" ")[0] ?? user.email.split("@")[0])
     : null;
@@ -30,7 +27,6 @@ export default function Navbar() {
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/60">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex h-16 items-center justify-between">
-        {/* Logo */}
         <Link
           href="/"
           className="flex items-center gap-2 font-bold text-xl tracking-tight text-gray-900"
@@ -41,7 +37,6 @@ export default function Navbar() {
           </span>
         </Link>
 
-        {/* Nav links */}
         <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-gray-600">
           <Link href="/" className="hover:text-gray-900 transition-colors">
             Kampanyalar
@@ -51,7 +46,6 @@ export default function Navbar() {
           </Link>
         </nav>
 
-        {/* Auth actions – hidden until hydration completes to prevent flash */}
         <div className="flex items-center gap-3">
           {!isHydrated ? (
             <div className="h-8 w-24 rounded-md bg-gray-100 animate-pulse" />
@@ -70,10 +64,17 @@ export default function Navbar() {
             </>
           ) : (
             <>
-              <Button variant="ghost" size="sm" onClick={() => openAuthModal()}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => openAuthModal(undefined, "login")}
+              >
                 Giriş Yap
               </Button>
-              <Button size="sm" onClick={() => openAuthModal()}>
+              <Button
+                size="sm"
+                onClick={() => openAuthModal(undefined, "register")}
+              >
                 Kayıt Ol
               </Button>
             </>

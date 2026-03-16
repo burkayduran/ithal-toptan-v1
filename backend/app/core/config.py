@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     
     # TCMB
     TCMB_API_URL: str = "https://evds2.tcmb.gov.tr"
+    # Fallback USD/TRY rate used when live rate cannot be fetched.
+    # Set via env var USD_TRY_FALLBACK_RATE. Update regularly in production.
+    USD_TRY_FALLBACK_RATE: float = 50.0
     
     class Config:
         env_file = ".env"

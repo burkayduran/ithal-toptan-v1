@@ -5,28 +5,30 @@ import { useAuthStore } from "./store";
 import { storeToken } from "@/lib/api/client";
 
 export function useLogin() {
-  const { setAuth, closeAuthModal, postAuthAction } = useAuthStore();
+  const { setAuth, consumePostAuthAction, closeAuthModal } = useAuthStore();
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (payload: LoginPayload) => {
       const tokenData = await login(payload);
-      // Persist token so getMe() can attach the Authorization header
       storeToken(tokenData.access_token);
       const user = await getMe();
       return { token: tokenData.access_token, user };
     },
     onSuccess: ({ token, user }) => {
       setAuth(token, user);
-      closeAuthModal();
       queryClient.invalidateQueries({ queryKey: ["wishlist"] });
-      postAuthAction?.();
+      // consumePostAuthAction uses get() internally – always reads the live
+      // store value, never a stale closure. Must run before closeAuthModal
+      // which would also clear postAuthAction.
+      consumePostAuthAction();
+      closeAuthModal();
     },
   });
 }
 
 export function useRegister() {
-  const { setAuth, closeAuthModal, postAuthAction } = useAuthStore();
+  const { setAuth, consumePostAuthAction, closeAuthModal } = useAuthStore();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -38,9 +40,9 @@ export function useRegister() {
     },
     onSuccess: ({ token, user }) => {
       setAuth(token, user);
-      closeAuthModal();
       queryClient.invalidateQueries({ queryKey: ["wishlist"] });
-      postAuthAction?.();
+      consumePostAuthAction();
+      closeAuthModal();
     },
   });
 }

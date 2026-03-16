@@ -6,6 +6,8 @@ export function getStatusLabel(status: ProductStatus): string {
       return "Aktif";
     case "moq_reached":
       return "Hedef Doldu";
+    case "payment_collecting":
+      return "Ödeme Toplanıyor";
     case "ordered":
       return "Sipariş Verildi";
     case "delivered":
@@ -28,6 +30,7 @@ export function getStatusVariant(
     case "active":
       return "default";
     case "moq_reached":
+    case "payment_collecting":
     case "ordered":
     case "delivered":
       return "secondary";

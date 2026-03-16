@@ -2,17 +2,17 @@
 
 import { useEffect } from "react";
 import { useAuthStore } from "@/features/auth/store";
-import { useWishlist } from "@/features/wishlist/hooks";
+import { useWishlist, useRemoveFromWishlist } from "@/features/wishlist/hooks";
 import { WishlistEntry } from "@/features/wishlist/types";
 import PageContainer from "@/components/layout/PageContainer";
 import SectionHeader from "@/components/common/SectionHeader";
 import EmptyState from "@/components/common/EmptyState";
 import LoadingState from "@/components/common/LoadingState";
-import StatusBadge from "@/components/campaign/StatusBadge";
 import { formatCurrency } from "@/lib/utils/formatCurrency";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import Image from "next/image";
+import { Loader2, Trash2 } from "lucide-react";
 
 const WISHLIST_STATUS_LABEL: Record<WishlistEntry["status"], string> = {
   waiting: "Beklemede",
@@ -25,9 +25,14 @@ const WISHLIST_STATUS_LABEL: Record<WishlistEntry["status"], string> = {
 const PLACEHOLDER_IMG =
   "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&q=80";
 
+// Only these statuses allow removal (matches backend logic)
+const REMOVABLE_STATUSES: WishlistEntry["status"][] = ["waiting", "expired"];
+
 function WishlistRow({ entry }: { entry: WishlistEntry }) {
   const thumbnail = entry.product_image ?? PLACEHOLDER_IMG;
   const title = entry.product_title ?? "Ürün";
+  const canRemove = REMOVABLE_STATUSES.includes(entry.status);
+  const { mutate: remove, isPending: isRemoving, error: removeError } = useRemoveFromWishlist();
 
   return (
     <div className="flex gap-4 sm:gap-6 bg-white rounded-xl border border-gray-200 p-4 hover:shadow-sm transition-shadow">
@@ -48,7 +53,6 @@ function WishlistRow({ entry }: { entry: WishlistEntry }) {
           <h3 className="font-semibold text-gray-900 text-sm leading-snug line-clamp-2">
             {title}
           </h3>
-          {/* Use a generic status badge style since WishlistStatus != ProductStatus */}
           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border bg-gray-100 text-gray-600 border-gray-200 whitespace-nowrap">
             {WISHLIST_STATUS_LABEL[entry.status]}
           </span>
@@ -74,11 +78,36 @@ function WishlistRow({ entry }: { entry: WishlistEntry }) {
           )}
         </div>
 
-        <Link href={`/campaigns/${entry.request_id}`}>
-          <Button variant="outline" size="sm" className="mt-1">
-            Kampanyayı Gör →
-          </Button>
-        </Link>
+        {removeError && (
+          <p className="text-xs text-red-600">
+            {(removeError as Error).message || "Bir hata oluştu."}
+          </p>
+        )}
+
+        <div className="flex items-center gap-2 flex-wrap mt-1">
+          <Link href={`/campaigns/${entry.request_id}`}>
+            <Button variant="outline" size="sm">
+              Kampanyayı Gör →
+            </Button>
+          </Link>
+
+          {canRemove && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-red-500 hover:text-red-700 hover:bg-red-50 gap-1.5"
+              onClick={() => remove(entry.request_id)}
+              disabled={isRemoving}
+            >
+              {isRemoving ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Trash2 className="h-3.5 w-3.5" />
+              )}
+              {isRemoving ? "İptal ediliyor..." : "Listeden Çık"}
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -86,11 +115,8 @@ function WishlistRow({ entry }: { entry: WishlistEntry }) {
 
 export default function MyCampaignsPage() {
   const { user, isHydrated, openAuthModal } = useAuthStore();
-
-  // useWishlist already has an enabled guard (isHydrated && !!token)
   const { data: wishlist, isLoading } = useWishlist();
 
-  // Prompt unauthenticated users to log in after hydration completes
   useEffect(() => {
     if (isHydrated && !user) {
       openAuthModal();

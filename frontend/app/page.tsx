@@ -9,19 +9,22 @@ import CampaignCard from "@/components/campaign/CampaignCard";
 import LoadingState from "@/components/common/LoadingState";
 import ErrorState from "@/components/common/ErrorState";
 import EmptyState from "@/components/common/EmptyState";
-import { ArrowRight, Package, Users, CreditCard, Zap } from "lucide-react";
+import { ArrowRight, Package, ShoppingBag, CreditCard, Zap } from "lucide-react";
 
 export default function HomePage() {
   const { data: products, isLoading, isError, refetch } = useProducts();
 
   const activeProducts = products?.filter((p) => p.status === "active") ?? [];
+  const moqReachedProducts = products?.filter((p) => p.status === "moq_reached") ?? [];
+  const paymentCollectingProducts = products?.filter((p) => p.status === "payment_collecting") ?? [];
 
-  // "Near unlock" = active products where moq_fill_percentage >= 60
-  const nearUnlock = activeProducts.filter(
-    (p) => (p.moq_fill_percentage ?? 0) >= 60
-  );
+  // Near-unlock: active products where >= 60% of MOQ is filled
+  const nearUnlock = activeProducts.filter((p) => (p.moq_fill_percentage ?? 0) >= 60);
 
-  const featured = activeProducts[0];
+  // Featured card: prefer active, otherwise first available product
+  const featured = activeProducts[0] ?? products?.[0];
+
+  const hasAnyProducts = (products?.length ?? 0) > 0;
 
   return (
     <>
@@ -40,7 +43,7 @@ export default function HomePage() {
                 <span className="text-yellow-300">Toptan Fiyatına</span> Alın
               </h1>
               <p className="text-blue-100 text-lg leading-relaxed max-w-md">
-                Yeterli kişi bekleme listesine katıldığında siparişiniz onaylanır.
+                Yeterli adet bekleme listesine eklendiğinde siparişiniz onaylanır.
                 Ödeme yalnızca MOQ dolduğunda alınır.
               </p>
               <a href="#campaigns">
@@ -54,7 +57,6 @@ export default function HomePage() {
               </a>
             </div>
 
-            {/* Featured campaign card */}
             {featured && (
               <div className="hidden lg:flex justify-end">
                 <div className="w-80">
@@ -81,7 +83,7 @@ export default function HomePage() {
                 desc: "Ürün detaylarını, fiyatları ve tahmini teslimat tarihini inceleyin.",
               },
               {
-                icon: <Users className="h-6 w-6 text-blue-600" />,
+                icon: <ShoppingBag className="h-6 w-6 text-blue-600" />,
                 step: "2",
                 title: "Bekleme Listesine Katılın",
                 desc: "İstediğiniz adedi seçerek bekleme listesine kaydolun.",
@@ -90,7 +92,7 @@ export default function HomePage() {
                 icon: <CreditCard className="h-6 w-6 text-blue-600" />,
                 step: "3",
                 title: "MOQ Dolunca Ödeyin",
-                desc: "Yeterli kişi katıldığında ödeme bildirimi gelir, siparişiniz onaylanır.",
+                desc: "Hedef adede ulaşıldığında ödeme bildirimi gelir, siparişiniz onaylanır.",
               },
             ].map((item) => (
               <div key={item.step} className="text-center space-y-3">
@@ -117,13 +119,14 @@ export default function HomePage() {
             <LoadingState />
           ) : isError ? (
             <ErrorState onRetry={() => refetch()} />
-          ) : activeProducts.length === 0 ? (
+          ) : !hasAnyProducts ? (
             <EmptyState
               title="Şu an aktif kampanya bulunmuyor"
               description="Yeni kampanyalar için daha sonra tekrar kontrol edin."
             />
           ) : (
             <div className="space-y-14">
+              {/* Near unlock – only from active products */}
               {nearUnlock.length > 0 && (
                 <section>
                   <SectionHeader
@@ -134,13 +137,38 @@ export default function HomePage() {
                 </section>
               )}
 
-              <section>
-                <SectionHeader
-                  title="Aktif Kampanyalar"
-                  subtitle="Şu an katılabileceğiniz tüm grup alımları."
-                />
-                <CampaignGrid products={activeProducts} />
-              </section>
+              {/* Active campaigns */}
+              {activeProducts.length > 0 && (
+                <section>
+                  <SectionHeader
+                    title="Aktif Kampanyalar"
+                    subtitle="Şu an katılabileceğiniz tüm grup alımları."
+                  />
+                  <CampaignGrid products={activeProducts} />
+                </section>
+              )}
+
+              {/* MOQ reached – still accepting late joiners */}
+              {moqReachedProducts.length > 0 && (
+                <section>
+                  <SectionHeader
+                    title="Hedefe Ulaştı"
+                    subtitle="Hedef doldu! Katılırsanız ödeme bildirimi alırsınız."
+                  />
+                  <CampaignGrid products={moqReachedProducts} />
+                </section>
+              )}
+
+              {/* Payment collecting – closed to new joiners */}
+              {paymentCollectingProducts.length > 0 && (
+                <section>
+                  <SectionHeader
+                    title="Ödeme Aşamasında"
+                    subtitle="Bu kampanyalar için ödeme toplanıyor."
+                  />
+                  <CampaignGrid products={paymentCollectingProducts} />
+                </section>
+              )}
             </div>
           )}
         </div>

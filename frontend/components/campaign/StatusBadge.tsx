@@ -10,6 +10,7 @@ interface StatusBadgeProps {
 const statusStyles: Partial<Record<ProductStatus, string>> = {
   active: "bg-green-100 text-green-800 border-green-200",
   moq_reached: "bg-blue-100 text-blue-800 border-blue-200",
+  payment_collecting: "bg-amber-100 text-amber-800 border-amber-200",
   ordered: "bg-purple-100 text-purple-800 border-purple-200",
   delivered: "bg-gray-100 text-gray-700 border-gray-200",
   cancelled: "bg-red-100 text-red-700 border-red-200",

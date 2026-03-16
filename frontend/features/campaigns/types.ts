@@ -4,6 +4,7 @@ export type ProductStatus =
   | "sourcing"
   | "active"
   | "moq_reached"
+  | "payment_collecting"
   | "ordered"
   | "delivered"
   | "cancelled";
