@@ -1,3 +1,5 @@
+import type { PaymentStage } from "@/features/payments/types";
+
 /** Matches backend WishlistEntry status values */
 export type WishlistStatus = "waiting" | "notified" | "paid" | "expired" | "cancelled";
 
@@ -16,4 +18,10 @@ export interface WishlistEntry {
   product_title: string | null;
   product_image: string | null;
   selling_price_try: number | null;
+  /** Total amount due for this entry in TRY (quantity × price) */
+  total_amount?: number | null;
+  /** Current progress toward MOQ (0-100) – not returned by backend, used by mock */
+  moq_fill_percentage?: number | null;
+  /** Lifecycle stage – used on payment and status pages */
+  stage?: PaymentStage | null;
 }

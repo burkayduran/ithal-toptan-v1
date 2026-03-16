@@ -2,6 +2,7 @@
 
 import { use } from "react";
 import { useProduct, useProducts } from "@/features/campaigns/hooks";
+import { useWishlist } from "@/features/wishlist/hooks";
 import PageContainer from "@/components/layout/PageContainer";
 import CampaignGallery from "@/components/campaign/CampaignGallery";
 import CampaignHeader from "@/components/campaign/CampaignHeader";
@@ -41,6 +42,8 @@ export default function CampaignDetailPage({
   const { id } = use(params);
   const { data: product, isLoading, isError, refetch } = useProduct(id);
   const { data: allProducts } = useProducts();
+  const { data: wishlist } = useWishlist();
+  const myEntry = wishlist?.find((e) => e.request_id === id) ?? null;
 
   const similarProducts = allProducts
     ?.filter((p) => p.id !== id && p.status === "active")
@@ -84,7 +87,7 @@ export default function CampaignDetailPage({
 
         <div className="space-y-6">
           <CampaignHeader product={product} />
-          <JoinPanel product={product} />
+          <JoinPanel product={product} entry={myEntry} />
         </div>
       </div>
 
