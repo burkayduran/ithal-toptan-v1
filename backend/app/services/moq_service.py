@@ -217,6 +217,16 @@ return val
         """Process entries after 48-hour deadline."""
         now = datetime.now(timezone.utc)
 
+        # Transition product moq_reached → payment_collecting to close new joins
+        await self.db.execute(
+            update(ProductRequest)
+            .where(
+                ProductRequest.id == request_id,
+                ProductRequest.status == "moq_reached",
+            )
+            .values(status="payment_collecting")
+        )
+
         await self.db.execute(
             update(WishlistEntry)
             .where(
@@ -273,7 +283,10 @@ return val
 
         await self.db.execute(
             update(ProductRequest)
-            .where(ProductRequest.id == request_id)
+            .where(
+                ProductRequest.id == request_id,
+                ProductRequest.status == "payment_collecting",
+            )
             .values(status="ordered")
         )
 
@@ -295,7 +308,10 @@ return val
 
         await self.db.execute(
             update(ProductRequest)
-            .where(ProductRequest.id == request_id)
+            .where(
+                ProductRequest.id == request_id,
+                ProductRequest.status == "payment_collecting",
+            )
             .values(
                 status="active",
                 moq_reached_at=None,

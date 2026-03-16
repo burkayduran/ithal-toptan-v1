@@ -134,7 +134,9 @@ async def add_to_wishlist(
             await db.commit()
         except IntegrityError:
             await db.rollback()
+            raise HTTPException(status_code=409, detail="Wishlist update conflict, please retry")
 
+        # Side effects run only after a successful commit
         moq_service = MoQService(db, redis)
         await moq_service.sync_counter_from_db(data.request_id)
 

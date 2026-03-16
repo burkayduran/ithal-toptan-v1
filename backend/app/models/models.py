@@ -70,7 +70,7 @@ class ProductRequest(Base):
     images: Mapped[List[str]] = mapped_column(ARRAY(Text), default=list)
     expected_price_try: Mapped[Optional[float]] = mapped_column(Numeric(10, 2))
     
-    # Status: pending, sourcing, active, moq_reached, ordered, delivered, cancelled
+    # Status: pending, sourcing, active, moq_reached, payment_collecting, ordered, delivered, cancelled
     status: Mapped[str] = mapped_column(String(50), default="pending", index=True)
     
     created_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
