@@ -53,6 +53,17 @@ class CategoryCreate(BaseModel):
     gumruk_rate: Optional[float] = None
     is_restricted: bool = False
     icon: Optional[str] = None
+    sort_order: int = 0
+
+
+class CategoryUpdate(BaseModel):
+    name: Optional[str] = None
+    slug: Optional[str] = None
+    parent_id: Optional[UUID] = None
+    gumruk_rate: Optional[float] = None
+    is_restricted: Optional[bool] = None
+    icon: Optional[str] = None
+    sort_order: Optional[int] = None
 
 
 class CategoryResponse(BaseModel):
@@ -63,7 +74,8 @@ class CategoryResponse(BaseModel):
     gumruk_rate: Optional[float]
     is_restricted: bool
     icon: Optional[str]
-    
+    sort_order: int
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -88,8 +100,9 @@ class ProductRequestResponse(BaseModel):
     expected_price_try: Optional[float]
     status: str
     created_by: Optional[UUID]
+    admin_notes: Optional[str] = None
     created_at: datetime
-    
+
     model_config = ConfigDict(from_attributes=True)
 
 
