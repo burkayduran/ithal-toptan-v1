@@ -38,8 +38,6 @@ export default function CountdownBlock({
   const [timeLeft, setTimeLeft] = useState<TimeLeft>(() => getTimeLeft(deadline));
 
   useEffect(() => {
-    // Initialize immediately with fresh value in case of SSR hydration drift
-    setTimeLeft(getTimeLeft(deadline));
     const id = setInterval(() => setTimeLeft(getTimeLeft(deadline)), 1_000);
     return () => clearInterval(id);
   }, [deadline]);

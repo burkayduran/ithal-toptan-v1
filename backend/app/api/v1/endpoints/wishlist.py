@@ -3,7 +3,7 @@ Wishlist endpoints - Add/remove from wishlist, MoQ tracking
 """
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from typing import List
@@ -169,6 +169,7 @@ async def add_to_wishlist(
         )
         offer = offer_result.scalar_one_or_none()
 
+        selling_price = float(offer.selling_price_try) if offer and offer.selling_price_try else None
         return WishlistResponse(
             id=entry.id,
             request_id=entry.request_id,
@@ -180,7 +181,8 @@ async def add_to_wishlist(
             payment_deadline=entry.payment_deadline,
             product_title=product_row.title,
             product_image=product_row.images[0] if product_row.images else None,
-            selling_price_try=float(offer.selling_price_try) if offer and offer.selling_price_try else None,
+            selling_price_try=selling_price,
+            total_amount=round(entry.quantity * selling_price, 2) if selling_price is not None else None,
         )
     finally:
         await redis.aclose()
@@ -230,17 +232,33 @@ async def get_my_wishlist(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get current user's wishlist."""
+    """Get current user's wishlist with computed total_amount and moq_fill_percentage."""
     result = await db.execute(
         select(WishlistEntry, ProductRequest)
         .join(ProductRequest, WishlistEntry.request_id == ProductRequest.id)
         .where(WishlistEntry.user_id == current_user.id)
         .order_by(WishlistEntry.joined_at.desc())
     )
+    rows = result.all()
+
+    if not rows:
+        return []
+
+    # Single aggregation query — avoids N Redis calls for moq fill percentage
+    request_ids = [product.id for _, product in rows]
+    count_result = await db.execute(
+        select(WishlistEntry.request_id, func.sum(WishlistEntry.quantity))
+        .where(
+            WishlistEntry.request_id.in_(request_ids),
+            WishlistEntry.status.in_(["waiting", "notified"]),
+        )
+        .group_by(WishlistEntry.request_id)
+    )
+    wishlist_counts: dict = {row[0]: int(row[1]) for row in count_result.all()}
 
     items = []
-    for entry, product in result.all():
-        # Get offer for pricing
+    for entry, product in rows:
+        # N+1 offer fetch — acceptable for small wishlists; batch query is Sprint 3 scope
         offer_result = await db.execute(
             select(SupplierOffer).where(
                 SupplierOffer.request_id == product.id,
@@ -249,21 +267,25 @@ async def get_my_wishlist(
         )
         offer = offer_result.scalar_one_or_none()
 
-        item_dict = {
-            "id": entry.id,
-            "request_id": entry.request_id,
-            "user_id": entry.user_id,
-            "quantity": entry.quantity,
-            "status": entry.status,
-            "joined_at": entry.joined_at,
-            "notified_at": entry.notified_at,
-            "payment_deadline": entry.payment_deadline,
-            "product_title": product.title,
-            "product_image": product.images[0] if product.images else None,
-            "selling_price_try": float(offer.selling_price_try) if offer and offer.selling_price_try else None,
-        }
+        selling_price = float(offer.selling_price_try) if offer and offer.selling_price_try else None
+        moq = offer.moq if offer and offer.moq else None
+        current_count = wishlist_counts.get(product.id, 0)
 
-        items.append(WishlistResponse(**item_dict))
+        items.append(WishlistResponse(
+            id=entry.id,
+            request_id=entry.request_id,
+            user_id=entry.user_id,
+            quantity=entry.quantity,
+            status=entry.status,
+            joined_at=entry.joined_at,
+            notified_at=entry.notified_at,
+            payment_deadline=entry.payment_deadline,
+            product_title=product.title,
+            product_image=product.images[0] if product.images else None,
+            selling_price_try=selling_price,
+            total_amount=round(entry.quantity * selling_price, 2) if selling_price is not None else None,
+            moq_fill_percentage=round(min(current_count / moq * 100, 100), 1) if moq else None,
+        ))
 
     return items
 

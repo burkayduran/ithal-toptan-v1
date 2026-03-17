@@ -1,6 +1,5 @@
 import { PaymentEntry } from "./types";
-import { WishlistEntry } from "@/features/wishlist/types";
-import { getMockPaymentEntry, MOCK_MY_CAMPAIGNS } from "./mock";
+import { getMockPaymentEntry } from "./mock";
 
 export async function getPaymentEntry(entryId: string): Promise<PaymentEntry> {
   const entry = getMockPaymentEntry(entryId);
@@ -24,9 +23,4 @@ export async function markPaymentAsPaid(entryId: string): Promise<PaymentEntry> 
     stage: "payment_confirmed",
     payment_deadline: null,
   };
-}
-
-/** Returns rich mock campaign data for My Campaigns page */
-export async function getMyCampaigns(): Promise<WishlistEntry[]> {
-  return MOCK_MY_CAMPAIGNS;
 }

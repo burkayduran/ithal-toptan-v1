@@ -1,5 +1,4 @@
 import { PaymentEntry } from "./types";
-import { WishlistEntry } from "@/features/wishlist/types";
 
 const HOUR = 60 * 60 * 1000;
 
@@ -58,80 +57,6 @@ export const MOCK_PAYMENT_ENTRIES: Record<string, PaymentEntry> = {
     lead_time_days: 7,
   },
 };
-
-/** Rich mock entries for My Campaigns page (all four tab states represented) */
-export const MOCK_MY_CAMPAIGNS: WishlistEntry[] = [
-  // Active tab — waiting, product still in campaign
-  {
-    id: "entry-waiting-1",
-    request_id: "req-005",
-    user_id: "mock-user",
-    quantity: 1,
-    status: "waiting",
-    joined_at: new Date(Date.now() - 5 * 24 * HOUR).toISOString(),
-    notified_at: null,
-    payment_deadline: null,
-    product_title: "Xiaomi Robot Vacuum X10+",
-    product_image:
-      "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=800&q=80",
-    selling_price_try: 2400,
-    total_amount: 2400,
-    moq_fill_percentage: 72,
-  },
-  {
-    id: "entry-waiting-2",
-    request_id: "req-006",
-    user_id: "mock-user",
-    quantity: 3,
-    status: "waiting",
-    joined_at: new Date(Date.now() - 2 * 24 * HOUR).toISOString(),
-    notified_at: null,
-    payment_deadline: null,
-    product_title: "Lego Technic BMW M1000 RR",
-    product_image:
-      "https://images.unsplash.com/photo-1587654780291-39c9404d746b?w=800&q=80",
-    selling_price_try: 1350,
-    total_amount: 4050,
-    moq_fill_percentage: 44,
-  },
-  // Payment Needed tab — notified
-  {
-    ...MOCK_PAYMENT_ENTRIES["entry-notified-1"],
-    user_id: "mock-user",
-    joined_at: new Date(Date.now() - 3 * 24 * HOUR).toISOString(),
-    notified_at: new Date(Date.now() - 1 * 24 * HOUR).toISOString(),
-    product_image:
-      "https://images.unsplash.com/photo-1603302576837-37561b2e2302?w=800&q=80",
-    selling_price_try: 1600,
-    moq_fill_percentage: 100,
-  } as WishlistEntry,
-  // Paid / In Progress tab — paid
-  {
-    ...MOCK_PAYMENT_ENTRIES["entry-paid-1"],
-    user_id: "mock-user",
-    joined_at: new Date(Date.now() - 10 * 24 * HOUR).toISOString(),
-    notified_at: new Date(Date.now() - 6 * 24 * HOUR).toISOString(),
-    selling_price_try: 1800,
-    moq_fill_percentage: 100,
-  } as WishlistEntry,
-  {
-    ...MOCK_PAYMENT_ENTRIES["entry-shipping-1"],
-    user_id: "mock-user",
-    joined_at: new Date(Date.now() - 20 * 24 * HOUR).toISOString(),
-    notified_at: new Date(Date.now() - 16 * 24 * HOUR).toISOString(),
-    selling_price_try: 4200,
-    moq_fill_percentage: 100,
-  } as WishlistEntry,
-  // Closed / Expired tab — expired
-  {
-    ...MOCK_PAYMENT_ENTRIES["entry-expired-1"],
-    user_id: "mock-user",
-    joined_at: new Date(Date.now() - 7 * 24 * HOUR).toISOString(),
-    notified_at: new Date(Date.now() - 3 * 24 * HOUR).toISOString(),
-    selling_price_try: 5500,
-    moq_fill_percentage: 100,
-  } as WishlistEntry,
-];
 
 export function getMockPaymentEntry(entryId: string): PaymentEntry | null {
   return MOCK_PAYMENT_ENTRIES[entryId] ?? null;

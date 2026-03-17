@@ -213,12 +213,16 @@ class WishlistResponse(BaseModel):
     joined_at: datetime
     notified_at: Optional[datetime]
     payment_deadline: Optional[datetime]
-    
+
     # Product info
     product_title: Optional[str] = None
     product_image: Optional[str] = None
     selling_price_try: Optional[float] = None
-    
+
+    # Computed fields — derived server-side, consumed by MyCampaignCard
+    total_amount: Optional[float] = None
+    moq_fill_percentage: Optional[float] = None
+
     model_config = ConfigDict(from_attributes=True)
 
 
