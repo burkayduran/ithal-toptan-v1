@@ -3,9 +3,9 @@ import { addToWishlist, getMyWishlist, removeFromWishlist } from "./api";
 import { useAuthStore } from "@/features/auth/store";
 
 export function useWishlist() {
-  const { token, isHydrated } = useAuthStore();
+  const { token, isHydrated, user } = useAuthStore();
   return useQuery({
-    queryKey: ["wishlist"],
+    queryKey: ["wishlist", user?.id ?? null],
     queryFn: getMyWishlist,
     enabled: isHydrated && !!token,
   });
