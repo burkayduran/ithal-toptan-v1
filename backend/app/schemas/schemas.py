@@ -1,8 +1,18 @@
 from pydantic import BaseModel, EmailStr, ConfigDict, Field
-from typing import Optional, List
+from typing import Optional, List, Literal
 from datetime import datetime
 from uuid import UUID
 from decimal import Decimal
+
+
+# ─── Status Literals ──────────────────────────────────────────────────────────
+
+ProductStatus = Literal[
+    "draft", "active", "moq_reached", "payment_collecting",
+    "ordered", "delivered", "cancelled"
+]
+
+ProductRequestStatus = Literal["pending", "reviewing", "approved", "rejected"]
 
 
 # ─── User Schemas ─────────────────────────────────────────────────────────────
@@ -108,7 +118,7 @@ class ProductRequestResponse(BaseModel):
 
 class ProductRequestUpdate(BaseModel):
     """Admin öneriyi günceller"""
-    status: Optional[str] = None  # reviewing, approved, rejected
+    status: Optional[ProductRequestStatus] = None
     admin_notes: Optional[str] = None
 
 
@@ -139,7 +149,7 @@ class ProductUpdate(BaseModel):
     description: Optional[str] = None
     category_id: Optional[UUID] = None
     images: Optional[List[str]] = None
-    status: Optional[str] = None
+    status: Optional[ProductStatus] = None
 
 
 class ProductResponse(BaseModel):
@@ -180,6 +190,15 @@ class SupplierOfferCreate(BaseModel):
     customs_rate: Optional[float] = 0.35  # %35
     margin_rate: float = 0.30  # %30
     notes: Optional[str] = None
+
+
+class PriceCalculateRequest(BaseModel):
+    """Fiyat önizleme isteği — request_id gerektirmez"""
+    unit_price_usd: float = Field(..., gt=0)
+    moq: int = Field(..., ge=1)
+    shipping_cost_usd: float = Field(0.0, ge=0)
+    customs_rate: float = Field(0.35, ge=0)
+    margin_rate: float = Field(0.30, ge=0)
 
 
 class PriceBreakdown(BaseModel):

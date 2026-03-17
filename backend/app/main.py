@@ -3,7 +3,12 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from uuid import UUID
 
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+
 from app.core.config import settings
+from app.core.limiter import limiter
 from app.db.session import engine, Base
 from app.api.v1.endpoints import auth, products, wishlist
 from app.api.admin import admin
@@ -47,6 +52,11 @@ app = FastAPI(
     openapi_url="/api/openapi.json"
 )
 
+# Rate limiter
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
+
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
@@ -64,30 +74,46 @@ app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
 
 
 # SSE endpoint for real-time MoQ progress
+_SSE_ALLOWED_STATUSES = {"active", "moq_reached", "payment_collecting", "ordered", "delivered"}
+
 @app.get("/api/v1/moq/progress/{request_id}")
 async def moq_progress_stream(request_id: UUID):
     """
     Server-Sent Events endpoint for real-time MoQ progress updates.
     Frontend can use EventSource to listen for updates.
+    Only publicly visible products (non-draft) are accessible.
     """
     if redis_client is None:
         raise HTTPException(status_code=503, detail="Real-time service unavailable")
+
+    from app.db.session import AsyncSessionLocal
+    from app.models.models import ProductRequest
+    from sqlalchemy import select as sa_select
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            sa_select(ProductRequest.status).where(ProductRequest.id == request_id)
+        )
+        row = result.scalar_one_or_none()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Product not found")
+        if row not in _SSE_ALLOWED_STATUSES:
+            raise HTTPException(status_code=403, detail="Product is not publicly accessible")
 
     async def event_generator():
         # Subscribe to Redis pub/sub channel
         channel = f"moq:progress:{str(request_id)}"
         pubsub = redis_client.pubsub()
         await pubsub.subscribe(channel)
-        
+
         # Send initial value
         from app.services.moq_service import MoQService
-        from app.db.session import AsyncSessionLocal
-        
+
         async with AsyncSessionLocal() as db:
             moq_service = MoQService(db, redis_client)
             current_count = await moq_service.get_current_count(request_id)
             yield {"data": str(current_count)}
-        
+
         # Listen for updates
         try:
             while True:
@@ -104,7 +130,7 @@ async def moq_progress_stream(request_id: UUID):
                 await pubsub.close()
             except Exception as exc:
                 print(f"SSE pubsub close error: {exc}")
-    
+
     return EventSourceResponse(event_generator())
 
 

@@ -5,7 +5,7 @@ from typing import Optional
 class Settings(BaseSettings):
     # App
     APP_NAME: str = "İthal Toptan 2.0"
-    DEBUG: bool = True
+    DEBUG: bool = False
     APP_VERSION: str = "2.0.0"
     
     # Security

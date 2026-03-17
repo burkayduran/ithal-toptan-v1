@@ -22,6 +22,7 @@ from app.schemas.schemas import (
     SupplierOfferCreate,
     SupplierOfferResponse,
     PriceBreakdown,
+    PriceCalculateRequest,
     CategoryCreate,
     CategoryUpdate,
     CategoryResponse,
@@ -484,7 +485,7 @@ async def update_product_request(
 
 @router.post("/calculate-price", response_model=PriceBreakdown)
 async def calculate_price_preview(
-    data: SupplierOfferCreate,
+    data: PriceCalculateRequest,
     admin: User = Depends(require_admin)
 ):
     """
@@ -492,13 +493,13 @@ async def calculate_price_preview(
     Admin teklif girmeden önce fiyatı görmek için kullanır.
     """
     calculator = PriceCalculator()
-    
+
     price_breakdown = await calculator.calculate_selling_price(
         unit_price_usd=data.unit_price_usd,
         moq=data.moq,
-        shipping_cost_usd=data.shipping_cost_usd or 0,
-        customs_rate=data.customs_rate or 0.20,
+        shipping_cost_usd=data.shipping_cost_usd,
+        customs_rate=data.customs_rate,
         margin_rate=data.margin_rate
     )
-    
+
     return price_breakdown

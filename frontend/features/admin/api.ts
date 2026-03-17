@@ -77,10 +77,9 @@ export function updateAdminProductRequest(
 
 // ── Price Preview ─────────────────────────────────────────────────────────
 
-/** Calculate selling price preview. Uses a nil UUID as dummy request_id (not used server-side). */
+/** Calculate selling price preview. */
 export function calculatePricePreview(payload: PricePreviewPayload): Promise<PriceBreakdown> {
   return api.post(`${ADMIN}/calculate-price`, {
-    request_id: "00000000-0000-0000-0000-000000000000",
     unit_price_usd: payload.unit_price_usd,
     moq: payload.moq,
     shipping_cost_usd: payload.shipping_cost_usd ?? 0,
