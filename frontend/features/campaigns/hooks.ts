@@ -13,5 +13,7 @@ export function useProduct(id: string) {
     queryKey: ["product", id],
     queryFn: () => getProductById(id),
     enabled: !!id,
+    // Poll every 30 s so campaign progress stays fresh without SSE
+    refetchInterval: 30_000,
   });
 }

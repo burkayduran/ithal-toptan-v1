@@ -38,7 +38,7 @@ export default function Navbar() {
         </Link>
 
         <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-gray-600">
-          <Link href="/" className="hover:text-gray-900 transition-colors">
+          <Link href="/campaigns" className="hover:text-gray-900 transition-colors">
             Kampanyalar
           </Link>
           <Link href="/my-campaigns" className="hover:text-gray-900 transition-colors">

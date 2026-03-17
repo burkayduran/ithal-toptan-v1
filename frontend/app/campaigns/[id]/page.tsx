@@ -9,7 +9,6 @@ import CampaignHeader from "@/components/campaign/CampaignHeader";
 import JoinPanel from "@/components/campaign/JoinPanel";
 import CampaignGrid from "@/components/campaign/CampaignGrid";
 import SectionHeader from "@/components/common/SectionHeader";
-import LoadingState from "@/components/common/LoadingState";
 import ErrorState from "@/components/common/ErrorState";
 import { Separator } from "@/components/ui/separator";
 import { ChevronRight, Home } from "lucide-react";
@@ -49,7 +48,36 @@ export default function CampaignDetailPage({
     ?.filter((p) => p.id !== id && p.status === "active")
     .slice(0, 3) ?? [];
 
-  if (isLoading) return <LoadingState />;
+  if (isLoading) {
+    return (
+      <PageContainer>
+        <div className="animate-pulse space-y-6">
+          {/* Breadcrumb skeleton */}
+          <div className="flex gap-2 items-center">
+            <div className="h-4 bg-gray-200 rounded w-16" />
+            <div className="h-4 bg-gray-200 rounded w-4" />
+            <div className="h-4 bg-gray-200 rounded w-20" />
+            <div className="h-4 bg-gray-200 rounded w-4" />
+            <div className="h-4 bg-gray-200 rounded w-32" />
+          </div>
+          {/* Main grid skeleton */}
+          <div className="grid lg:grid-cols-2 gap-10 lg:gap-16">
+            <div className="aspect-square bg-gray-200 rounded-xl" />
+            <div className="space-y-4 pt-2">
+              <div className="h-7 bg-gray-200 rounded w-3/4" />
+              <div className="h-5 bg-gray-200 rounded w-1/3" />
+              <div className="h-4 bg-gray-200 rounded w-1/4" />
+              <div className="space-y-2 mt-6">
+                <div className="h-3 bg-gray-200 rounded w-full" />
+                <div className="h-3 bg-gray-200 rounded w-5/6" />
+              </div>
+              <div className="h-36 bg-gray-200 rounded-xl mt-4" />
+            </div>
+          </div>
+        </div>
+      </PageContainer>
+    );
+  }
   if (isError || !product) {
     return (
       <PageContainer>
@@ -74,7 +102,7 @@ export default function CampaignDetailPage({
           Ana Sayfa
         </Link>
         <ChevronRight className="h-3.5 w-3.5" />
-        <Link href="/" className="hover:text-gray-700">
+        <Link href="/campaigns" className="hover:text-gray-700">
           Kampanyalar
         </Link>
         <ChevronRight className="h-3.5 w-3.5" />

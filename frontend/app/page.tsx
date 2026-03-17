@@ -6,7 +6,7 @@ import PageContainer from "@/components/layout/PageContainer";
 import SectionHeader from "@/components/common/SectionHeader";
 import CampaignGrid from "@/components/campaign/CampaignGrid";
 import CampaignCard from "@/components/campaign/CampaignCard";
-import LoadingState from "@/components/common/LoadingState";
+import CampaignCardSkeleton from "@/components/campaign/CampaignCardSkeleton";
 import ErrorState from "@/components/common/ErrorState";
 import EmptyState from "@/components/common/EmptyState";
 import { ArrowRight, Package, ShoppingBag, CreditCard, Zap } from "lucide-react";
@@ -116,7 +116,11 @@ export default function HomePage() {
       <PageContainer>
         <div id="campaigns">
           {isLoading ? (
-            <LoadingState />
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <CampaignCardSkeleton key={i} />
+              ))}
+            </div>
           ) : isError ? (
             <ErrorState onRetry={() => refetch()} />
           ) : !hasAnyProducts ? (
