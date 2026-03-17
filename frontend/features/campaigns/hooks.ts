@@ -5,6 +5,8 @@ export function useProducts() {
   return useQuery({
     queryKey: ["products"],
     queryFn: () => getProducts(),
+    // Poll every 60 s — keeps home and listing in sync with detail page (30 s)
+    refetchInterval: 60_000,
   });
 }
 

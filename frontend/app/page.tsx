@@ -21,8 +21,12 @@ export default function HomePage() {
   // Near-unlock: active products where >= 60% of MOQ is filled
   const nearUnlock = activeProducts.filter((p) => (p.moq_fill_percentage ?? 0) >= 60);
 
-  // Featured card: prefer active, otherwise first available product
-  const featured = activeProducts[0] ?? products?.[0];
+  // Featured card: priority active → moq_reached → payment_collecting, never internal states
+  const featured =
+    activeProducts[0] ??
+    moqReachedProducts[0] ??
+    paymentCollectingProducts[0] ??
+    null;
 
   const hasAnyProducts = (products?.length ?? 0) > 0;
 

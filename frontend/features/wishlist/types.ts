@@ -20,7 +20,7 @@ export interface WishlistEntry {
   selling_price_try: number | null;
   /** Total amount due for this entry in TRY (quantity × price) */
   total_amount?: number | null;
-  /** Current progress toward MOQ (0-100) – not returned by backend, used by mock */
+  /** Current progress toward MOQ (0-100) – computed server-side in get_my_wishlist */
   moq_fill_percentage?: number | null;
   /** Lifecycle stage – used on payment and status pages */
   stage?: PaymentStage | null;

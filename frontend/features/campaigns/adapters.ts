@@ -11,15 +11,16 @@ export type SortOption = "near_unlock" | "newest" | "lowest_price";
 
 /**
  * Filter products by search text and status tab.
- * Always excludes pending/sourcing/cancelled/delivered — those are internal states.
+ * Only shows discoverable states: active, moq_reached, payment_collecting.
+ * Excludes pending/sourcing/ordered/delivered/cancelled — internal or post-purchase states.
  */
 export function filterProducts(
   products: Product[],
   { search, status }: { search: string; status: StatusFilter }
 ): Product[] {
-  // Public-facing statuses only
+  // Discovery-facing statuses only — ordered/delivered/cancelled are not shown in listing
   let result = products.filter((p) =>
-    ["active", "moq_reached", "payment_collecting", "ordered"].includes(p.status)
+    ["active", "moq_reached", "payment_collecting"].includes(p.status)
   );
 
   if (search.trim()) {
