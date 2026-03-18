@@ -9,36 +9,36 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from app.core.config import settings
 from app.core.limiter import limiter
+from app.core.logging import setup_logging
+from app.core.redis import get_redis, close_redis
+
+# Initialize logging
+setup_logging()
 from app.db.session import engine, Base
 from app.api.v1.endpoints import auth, products, wishlist, payments
 from app.api.admin import admin
-import redis.asyncio as aioredis
 from sse_starlette.sse import EventSourceResponse
 import asyncio
+import logging
 
-
-# Global Redis connection for SSE
-redis_client: aioredis.Redis = None
+logger = logging.getLogger("ithal_toptan")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup/shutdown events."""
-    global redis_client
-    
     # Startup: Create tables
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    
-    # Connect to Redis and verify the connection is live
-    redis_client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+
+    # Initialize Redis pool and verify
+    redis_client = await get_redis()
     await redis_client.ping()
 
     yield
-    
+
     # Shutdown
-    if redis_client:
-        await redis_client.aclose()
+    await close_redis()
     await engine.dispose()
 
 
@@ -85,8 +85,7 @@ async def moq_progress_stream(request: Request, request_id: UUID):
     Frontend can use EventSource to listen for updates.
     Only publicly visible products (non-draft) are accessible.
     """
-    if redis_client is None:
-        raise HTTPException(status_code=503, detail="Real-time service unavailable")
+    redis_client = await get_redis()
 
     from app.db.session import AsyncSessionLocal
     from app.models.models import ProductRequest
@@ -97,8 +96,6 @@ async def moq_progress_stream(request: Request, request_id: UUID):
             sa_select(ProductRequest.status).where(ProductRequest.id == request_id)
         )
         row = result.scalar_one_or_none()
-        # Uniform 404 for both missing and non-public products to avoid
-        # confirming whether a product exists at all
         if row is None or row not in _SSE_ALLOWED_STATUSES:
             raise HTTPException(status_code=404, detail="Not found")
 
@@ -127,11 +124,11 @@ async def moq_progress_stream(request: Request, request_id: UUID):
             try:
                 await pubsub.unsubscribe(channel)
             except Exception as exc:
-                print(f"SSE unsubscribe error: {exc}")
+                logger.warning("SSE unsubscribe error: %s", exc)
             try:
                 await pubsub.close()
             except Exception as exc:
-                print(f"SSE pubsub close error: {exc}")
+                logger.warning("SSE pubsub close error: %s", exc)
 
     return EventSourceResponse(event_generator())
 

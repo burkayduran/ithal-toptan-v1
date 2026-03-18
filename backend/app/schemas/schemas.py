@@ -186,6 +186,15 @@ class ProductResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class PaginatedProductResponse(BaseModel):
+    """Paginated product list response."""
+    items: List[ProductResponse]
+    total: int
+    page: int
+    per_page: int
+    total_pages: int
+
+
 class AdminProductDetailResponse(ProductResponse):
     """Admin-level product response — includes supplier/offer details for edit form."""
     supplier_name: Optional[str] = None

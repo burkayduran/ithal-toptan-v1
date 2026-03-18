@@ -9,6 +9,8 @@ from typing import List
 from uuid import UUID
 from datetime import datetime, timezone
 
+from sqlalchemy.exc import IntegrityError as SQLIntegrityError
+
 from app.db.session import get_db
 from app.models.models import (
     User, ProductRequest, SupplierOffer, WishlistEntry, Category
@@ -174,6 +176,20 @@ async def update_product(
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
 
+    # A1: Ödeme süreci başlamış kampanyalarda fiyat/tedarikçi değişikliğini engelle
+    LOCKED_STATUSES = {"moq_reached", "payment_collecting", "ordered"}
+    LOCKED_FIELDS = [
+        "unit_price_usd", "moq", "shipping_cost_usd", "customs_rate",
+        "margin_rate", "supplier_name", "supplier_country", "alibaba_product_url",
+    ]
+    if product.status in LOCKED_STATUSES:
+        for field_name in LOCKED_FIELDS:
+            if getattr(data, field_name, None) is not None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Ödeme süreci başlamış kampanyalarda fiyat ve tedarikçi bilgileri değiştirilemez.",
+                )
+
     # Update product fields
     if data.title is not None:
         product.title = data.title
@@ -294,27 +310,40 @@ async def list_all_products(
         select(ProductRequest).order_by(ProductRequest.created_at.desc())
     )
     products = result.scalars().all()
-    
+
+    if not products:
+        return []
+
+    product_ids = [p.id for p in products]
+
+    # Batch: offers
+    offer_result = await db.execute(
+        select(SupplierOffer).where(
+            SupplierOffer.request_id.in_(product_ids),
+            SupplierOffer.is_selected == True
+        )
+    )
+    offers_map = {o.request_id: o for o in offer_result.scalars().all()}
+
+    # Batch: wishlist counts
+    count_result = await db.execute(
+        select(
+            WishlistEntry.request_id,
+            func.coalesce(func.sum(WishlistEntry.quantity), 0)
+        )
+        .where(
+            WishlistEntry.request_id.in_(product_ids),
+            WishlistEntry.status.in_(["waiting", "notified"])
+        )
+        .group_by(WishlistEntry.request_id)
+    )
+    counts_map = {row[0]: int(row[1]) for row in count_result.all()}
+
     enriched = []
     for product in products:
-        # Get offer
-        offer_result = await db.execute(
-            select(SupplierOffer).where(
-                SupplierOffer.request_id == product.id,
-                SupplierOffer.is_selected == True
-            )
-        )
-        offer = offer_result.scalar_one_or_none()
-        
-        # Get wishlist count
-        count_result = await db.execute(
-            select(func.coalesce(func.sum(WishlistEntry.quantity), 0)).where(
-                WishlistEntry.request_id == product.id,
-                WishlistEntry.status.in_(["waiting", "notified"])
-            )
-        )
-        wishlist_count = count_result.scalar() or 0
-        
+        offer = offers_map.get(product.id)
+        wishlist_count = counts_map.get(product.id, 0)
+
         product_dict = {
             "id": product.id,
             "title": product.title,
@@ -331,9 +360,9 @@ async def list_all_products(
             "current_wishlist_count": wishlist_count,
             "moq_fill_percentage": round(wishlist_count / offer.moq * 100, 1) if offer and offer.moq else None,
         }
-        
+
         enriched.append(ProductResponse(**product_dict))
-    
+
     return enriched
 
 
@@ -394,6 +423,82 @@ async def get_product(
     )
 
 
+@router.post("/products/bulk-publish")
+async def bulk_publish(
+    product_ids: List[UUID],
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Birden fazla taslak ürünü toplu yayınlar."""
+    published = []
+    failed = []
+
+    for pid in product_ids:
+        result = await db.execute(
+            select(ProductRequest).where(ProductRequest.id == pid)
+        )
+        product = result.scalar_one_or_none()
+
+        if not product:
+            failed.append({"id": str(pid), "reason": "Ürün bulunamadı"})
+            continue
+
+        if product.status != "draft":
+            failed.append({"id": str(pid), "reason": f"Durum zaten '{product.status}'"})
+            continue
+
+        # Check offer exists
+        offer_result = await db.execute(
+            select(SupplierOffer).where(
+                SupplierOffer.request_id == pid,
+                SupplierOffer.is_selected == True,
+            )
+        )
+        if not offer_result.scalar_one_or_none():
+            failed.append({"id": str(pid), "reason": "Teklif bulunamadı"})
+            continue
+
+        product.status = "active"
+        product.activated_at = datetime.now(timezone.utc)
+        published.append(str(pid))
+
+    await db.commit()
+
+    return {"published": published, "failed": failed}
+
+
+@router.post("/products/bulk-cancel")
+async def bulk_cancel(
+    product_ids: List[UUID],
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Birden fazla ürünü toplu iptal eder."""
+    cancelled = []
+    failed = []
+
+    for pid in product_ids:
+        result = await db.execute(
+            select(ProductRequest).where(ProductRequest.id == pid)
+        )
+        product = result.scalar_one_or_none()
+
+        if not product:
+            failed.append({"id": str(pid), "reason": "Ürün bulunamadı"})
+            continue
+
+        if product.status in ["ordered", "delivered"]:
+            failed.append({"id": str(pid), "reason": f"'{product.status}' durumundaki ürün iptal edilemez"})
+            continue
+
+        product.status = "cancelled"
+        cancelled.append(str(pid))
+
+    await db.commit()
+
+    return {"cancelled": cancelled, "failed": failed}
+
+
 # ════════════════════════════════════════════════════════════════════════════
 # KATEGORİ YÖNETİMİ
 # ════════════════════════════════════════════════════════════════════════════
@@ -429,9 +534,9 @@ async def create_category(
     db.add(category)
     try:
         await db.commit()
-    except Exception:
+    except SQLIntegrityError:
         await db.rollback()
-        raise HTTPException(status_code=409, detail="Slug already exists")
+        raise HTTPException(status_code=409, detail="Bu slug zaten kullanılıyor.")
     await db.refresh(category)
     return category
 
@@ -488,7 +593,7 @@ async def delete_category(
     try:
         await db.delete(category)
         await db.commit()
-    except Exception:
+    except SQLIntegrityError:
         await db.rollback()
         raise HTTPException(
             status_code=409,

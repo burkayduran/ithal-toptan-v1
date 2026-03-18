@@ -1,12 +1,22 @@
 import { useQuery } from "@tanstack/react-query";
-import { getProducts, getProductById } from "./api";
+import { getProducts, getProductById, getSimilarProducts } from "./api";
+import { Product, PaginatedResponse } from "./types";
 
-export function useProducts() {
+export function useProducts(params?: { category_id?: string; per_page?: number }) {
   return useQuery({
-    queryKey: ["products"],
-    queryFn: () => getProducts(),
+    queryKey: ["products", params],
+    queryFn: () => getProducts(params),
+    select: (data: PaginatedResponse<Product>) => data.items,
     // Poll every 60 s — keeps home and listing in sync with detail page (30 s)
     refetchInterval: 60_000,
+  });
+}
+
+export function useSimilarProducts(id: string) {
+  return useQuery({
+    queryKey: ["products", "similar", id],
+    queryFn: () => getSimilarProducts(id),
+    enabled: !!id,
   });
 }
 

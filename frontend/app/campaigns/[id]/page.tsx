@@ -1,7 +1,7 @@
 "use client";
 
 import { use } from "react";
-import { useProduct, useProducts } from "@/features/campaigns/hooks";
+import { useProduct, useSimilarProducts } from "@/features/campaigns/hooks";
 import { useWishlist } from "@/features/wishlist/hooks";
 import PageContainer from "@/components/layout/PageContainer";
 import CampaignGallery from "@/components/campaign/CampaignGallery";
@@ -40,13 +40,9 @@ export default function CampaignDetailPage({
 }) {
   const { id } = use(params);
   const { data: product, isLoading, isError, refetch } = useProduct(id);
-  const { data: allProducts } = useProducts();
+  const { data: similarProducts = [] } = useSimilarProducts(id);
   const { data: wishlist } = useWishlist();
   const myEntry = wishlist?.find((e) => e.request_id === id) ?? null;
-
-  const similarProducts = allProducts
-    ?.filter((p) => p.id !== id && p.status === "active")
-    .slice(0, 3) ?? [];
 
   if (isLoading) {
     return (

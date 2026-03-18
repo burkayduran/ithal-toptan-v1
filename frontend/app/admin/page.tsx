@@ -31,6 +31,9 @@ export default function AdminDashboard() {
   const draft = products?.filter((p) => p.status === "draft").length ?? 0;
   const active = products?.filter((p) => p.status === "active").length ?? 0;
   const pending = pendingRequests?.length ?? 0;
+  const moqReached = products?.filter((p) => p.status === "moq_reached").length ?? 0;
+  const paymentCollecting = products?.filter((p) => p.status === "payment_collecting").length ?? 0;
+  const ordered = products?.filter((p) => p.status === "ordered").length ?? 0;
 
   const SHORTCUTS = [
     {
@@ -64,12 +67,23 @@ export default function AdminDashboard() {
       <h1 className="text-xl font-bold text-gray-900 mb-1">Dashboard</h1>
       <p className="text-sm text-gray-500 mb-8">Yönetim paneline hoş geldiniz.</p>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-10">
+      {/* Stats - Row 1 */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
         <StatCard label="Toplam Ürün" value={total} />
         <StatCard label="Yayında" value={active} />
         <StatCard label="Taslak" value={draft} />
         <StatCard label="Bekleyen İstek" value={pending} />
+      </div>
+
+      {/* Stats - Row 2: Funnel */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-10">
+        <StatCard
+          label="MOQ Dolmuş"
+          value={moqReached}
+          sub={active > 0 ? `Aktif → MOQ: %${active > 0 ? Math.round((moqReached / active) * 100) : 0}` : undefined}
+        />
+        <StatCard label="Ödeme Toplanıyor" value={paymentCollecting} />
+        <StatCard label="Sipariş Verilmiş" value={ordered} />
       </div>
 
       {/* Quick access */}

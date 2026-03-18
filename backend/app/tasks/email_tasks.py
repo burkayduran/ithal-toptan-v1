@@ -2,12 +2,15 @@
 Celery Email Tasks
 Background jobs for sending emails
 """
+import logging
 from typing import List
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import select, and_
 from uuid import UUID
 
 from app.tasks.celery_app import celery_app
+
+logger = logging.getLogger("ithal_toptan")
 from app.services.email_service import EmailService
 from app.templates.email_templates import EmailTemplates
 from app.db.session import AsyncSessionLocal
@@ -50,7 +53,7 @@ async def _send_moq_reached_email_async(request_id: str, deadline: str):
         product = product_result.scalar_one_or_none()
         
         if not product:
-            print(f"❌ Product {request_id} not found")
+            logger.error("Product %s not found", request_id)
             return
         
         # Get offer
@@ -63,7 +66,7 @@ async def _send_moq_reached_email_async(request_id: str, deadline: str):
         offer = offer_result.scalar_one_or_none()
         
         if not offer:
-            print(f"❌ No offer for product {request_id}")
+            logger.error("No offer for product %s", request_id)
             return
         
         # Get notified entries
@@ -78,10 +81,10 @@ async def _send_moq_reached_email_async(request_id: str, deadline: str):
         entries = entries_result.all()
         
         if not entries:
-            print(f"⚠️ No notified entries for {request_id}")
+            logger.warning("No notified entries for %s", request_id)
             return
         
-        print(f"📧 Sending MoQ reached emails to {len(entries)} users...")
+        logger.info("Sending MoQ reached emails to %d users", len(entries))
         
         # Send emails
         for entry, user in entries:
@@ -105,7 +108,7 @@ async def _send_moq_reached_email_async(request_id: str, deadline: str):
                     html=html
                 )
             except Exception as exc:
-                print(f"❌ Email exception for {user.email}: {exc}")
+                logger.error("Email exception for %s: %s", user.email, exc)
                 send_result = {"status": "error", "error": str(exc)}
 
             # Update notification status based on actual send outcome
@@ -131,7 +134,7 @@ async def _send_moq_reached_email_async(request_id: str, deadline: str):
                 notification.status = notif_status
         
         await db.commit()
-        print(f"✅ Sent {len(entries)} MoQ reached emails")
+        logger.info("Sent %d MoQ reached emails", len(entries))
 
 
 @celery_app.task(
@@ -186,14 +189,14 @@ async def _send_payment_reminders_async():
         entries = entries_result.all()
 
         if not entries:
-            print("⚠️ No entries need payment reminder")
+            logger.info("No entries need payment reminder")
             return
 
-        print(f"📧 Sending payment reminders to {len(entries)} users...")
+        logger.info("Sending payment reminders to %d users", len(entries))
 
         for entry, user, product, offer in entries:
             if offer is None:
-                print(f"⚠️ No selected offer for product {product.id}, skipping reminder for {user.email}")
+                logger.warning("No selected offer for product %s, skipping reminder for %s", product.id, user.email)
                 continue
             # Check if reminder already sent
             notif_result = await db.execute(
@@ -230,7 +233,7 @@ async def _send_payment_reminders_async():
                     html=html
                 )
             except Exception as exc:
-                print(f"❌ Reminder email exception for {user.email}: {exc}")
+                logger.error("Reminder email exception for %s: %s", user.email, exc)
                 send_result = {"status": "error", "error": str(exc)}
 
             if send_result.get("status") == "skipped":
@@ -250,7 +253,7 @@ async def _send_payment_reminders_async():
             db.add(notification)
         
         await db.commit()
-        print(f"✅ Sent {len(entries)} payment reminders")
+        logger.info("Sent %d payment reminders", len(entries))
 
 
 @celery_app.task(name="app.tasks.email_tasks.send_payment_success_email")
@@ -287,7 +290,7 @@ async def _send_payment_success_email_async(entry_id: str):
         row = result.one_or_none()
         
         if not row:
-            print(f"❌ Entry {entry_id} not found")
+            logger.error("Entry %s not found", entry_id)
             return
         
         entry, user, product, offer = row
@@ -309,7 +312,7 @@ async def _send_payment_success_email_async(entry_id: str):
             html=html
         )
         
-        print(f"✅ Sent payment success email to {user.email}")
+        logger.info("Sent payment success email to %s", user.email)
 
 
 @celery_app.task(name="app.tasks.email_tasks.send_moq_failed_email")
@@ -337,7 +340,7 @@ async def _send_moq_failed_email_async(request_id: str):
         product = product_result.scalar_one_or_none()
         
         if not product:
-            print(f"❌ Product {request_id} not found")
+            logger.error("Product %s not found", request_id)
             return
         
         # Get offer
@@ -371,7 +374,7 @@ async def _send_moq_failed_email_async(request_id: str):
         )
         paid_count = paid_result.scalar() or 0
         
-        print(f"📧 Sending MoQ failed emails to {len(entries)} users...")
+        logger.info("Sending MoQ failed emails to %d users", len(entries))
         
         for entry, user in entries:
             email_data = {
@@ -389,4 +392,4 @@ async def _send_moq_failed_email_async(request_id: str):
                 html=html
             )
         
-        print(f"✅ Sent {len(entries)} MoQ failed emails")
+        logger.info("Sent %d MoQ failed emails", len(entries))

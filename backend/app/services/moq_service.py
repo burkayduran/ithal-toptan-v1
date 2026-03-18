@@ -135,10 +135,12 @@ return val
         return {"threshold_met": True, "transition_performed": transition_performed, "status_after": status_after}
 
     async def trigger_payment_phase(self, request_id: UUID, offer: SupplierOffer) -> bool:
-        """Trigger 48-hour payment window when MoQ is reached."""
+        """Trigger 48-hour payment window when MoQ is reached.
+        All DB mutations happen in a single transaction to avoid partial state."""
         now = datetime.now(timezone.utc)
         deadline = now + timedelta(hours=48)
 
+        # Status güncellemesi
         product_update = await self.db.execute(
             update(ProductRequest)
             .where(
@@ -156,6 +158,7 @@ return val
             await self.db.rollback()
             return False
 
+        # Wishlist güncellemesi
         await self.db.execute(
             update(WishlistEntry)
             .where(
@@ -169,8 +172,7 @@ return val
             )
         )
 
-        await self.db.commit()
-
+        # Notification oluşturma (AYNI transaction içinde)
         notified_result = await self.db.execute(
             select(WishlistEntry).where(
                 WishlistEntry.request_id == request_id,
@@ -203,8 +205,10 @@ return val
                 )
             )
 
+        # TEK COMMIT — status + wishlist + notification hepsi atomik
         await self.db.commit()
 
+        # Side effects (Celery tasks) commit sonrası
         from app.tasks.email_tasks import send_moq_reached_email
         from app.tasks.moq_tasks import cleanup_expired_entries
 

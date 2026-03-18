@@ -39,6 +39,18 @@ export function publishAdminProduct(id: string): Promise<{ message: string; id: 
   return api.post(`${ADMIN}/products/${id}/publish`);
 }
 
+export function bulkPublishProducts(
+  product_ids: string[]
+): Promise<{ published: string[]; failed: { id: string; reason: string }[] }> {
+  return api.post(`${ADMIN}/products/bulk-publish`, product_ids);
+}
+
+export function bulkCancelProducts(
+  product_ids: string[]
+): Promise<{ cancelled: string[]; failed: { id: string; reason: string }[] }> {
+  return api.post(`${ADMIN}/products/bulk-cancel`, product_ids);
+}
+
 // ── Categories ────────────────────────────────────────────────────────────
 
 export function getAdminCategories(): Promise<AdminCategory[]> {

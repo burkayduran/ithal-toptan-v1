@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   useAdminCategories,
   useCreateCategory,
@@ -29,15 +29,56 @@ interface EditState {
   sort_order: string;
 }
 
+/** Build a tree-ordered flat list: parent first, then children (indented). */
+function buildTreeList(categories: AdminCategory[]): (AdminCategory & { depth: number })[] {
+  const roots = categories.filter((c) => !c.parent_id);
+  const childrenMap = new Map<string, AdminCategory[]>();
+  for (const c of categories) {
+    if (c.parent_id) {
+      const siblings = childrenMap.get(c.parent_id) ?? [];
+      siblings.push(c);
+      childrenMap.set(c.parent_id, siblings);
+    }
+  }
+
+  const result: (AdminCategory & { depth: number })[] = [];
+  for (const root of roots) {
+    result.push({ ...root, depth: 0 });
+    const children = childrenMap.get(root.id) ?? [];
+    for (const child of children) {
+      result.push({ ...child, depth: 1 });
+    }
+  }
+
+  // Add orphans (parent_id set but parent not found)
+  const addedIds = new Set(result.map((r) => r.id));
+  for (const c of categories) {
+    if (!addedIds.has(c.id)) {
+      result.push({ ...c, depth: 1 });
+    }
+  }
+
+  return result;
+}
+
+/** Build a select option list with indent for sub-categories. */
+function buildParentOptions(categories: AdminCategory[], excludeId?: string) {
+  const roots = categories.filter((c) => !c.parent_id && c.id !== excludeId);
+  return roots.map((r) => ({ id: r.id, label: r.name }));
+}
+
 export default function AdminCategoriesPage() {
   const { data: categories, isLoading, isError, refetch } = useAdminCategories();
   const { mutate: create, isPending: isCreating } = useCreateCategory();
   const { mutate: update, isPending: isUpdating } = useUpdateCategory();
   const { mutate: remove, isPending: isDeleting, variables: deletingId } = useDeleteCategory();
 
-  const [newForm, setNewForm] = useState({ name: "", slug: "", gumruk_rate: "", sort_order: "0" });
+  const [newForm, setNewForm] = useState({ name: "", slug: "", gumruk_rate: "", sort_order: "0", parent_id: "" });
   const [editState, setEditState] = useState<EditState | null>(null);
   const [createError, setCreateError] = useState("");
+
+  const treeList = useMemo(() => buildTreeList(categories ?? []), [categories]);
+  const parentOptions = useMemo(() => buildParentOptions(categories ?? []), [categories]);
 
   function handleNameChange(name: string) {
     setNewForm((prev) => ({ ...prev, name, slug: slugify(name) }));
@@ -51,11 +92,12 @@ export default function AdminCategoriesPage() {
       {
         name: newForm.name.trim(),
         slug: newForm.slug.trim(),
+        parent_id: newForm.parent_id || undefined,
         gumruk_rate: newForm.gumruk_rate ? parseFloat(newForm.gumruk_rate) / 100 : undefined,
         sort_order: parseInt(newForm.sort_order) || 0,
       },
       {
-        onSuccess: () => setNewForm({ name: "", slug: "", gumruk_rate: "", sort_order: "0" }),
+        onSuccess: () => setNewForm({ name: "", slug: "", gumruk_rate: "", sort_order: "0", parent_id: "" }),
         onError: (err) => setCreateError((err as Error).message),
       }
     );
@@ -92,6 +134,13 @@ export default function AdminCategoriesPage() {
     );
   }
 
+  /** Get display name with parent prefix for child categories */
+  function getDisplayName(cat: AdminCategory & { depth: number }) {
+    if (cat.depth === 0) return cat.name;
+    const parent = (categories ?? []).find((c) => c.id === cat.parent_id);
+    return parent ? `${parent.name} > ${cat.name}` : cat.name;
+  }
+
   return (
     <div className="p-6 max-w-3xl">
       <h1 className="text-xl font-bold text-gray-900 mb-6">Kategoriler</h1>
@@ -123,6 +172,21 @@ export default function AdminCategoriesPage() {
               onChange={(e) => setNewForm((p) => ({ ...p, slug: e.target.value }))}
               placeholder="elektronik"
             />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Üst Kategori</Label>
+            <select
+              value={newForm.parent_id}
+              onChange={(e) => setNewForm((p) => ({ ...p, parent_id: e.target.value }))}
+              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none"
+            >
+              <option value="">Ana Kategori (yok)</option>
+              {parentOptions.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Gümrük Oranı (%)</Label>
@@ -164,7 +228,7 @@ export default function AdminCategoriesPage() {
             Tekrar dene
           </button>
         </div>
-      ) : (categories ?? []).length === 0 ? (
+      ) : treeList.length === 0 ? (
         <div className="text-sm text-gray-400 py-10 text-center">Henüz kategori yok.</div>
       ) : (
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
@@ -178,7 +242,7 @@ export default function AdminCategoriesPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {(categories ?? []).map((cat) => {
+              {treeList.map((cat) => {
                 const isEditing = editState?.id === cat.id;
                 return (
                   <tr key={cat.id} className="hover:bg-gray-50">
@@ -201,8 +265,11 @@ export default function AdminCategoriesPage() {
                           />
                         </div>
                       ) : (
-                        <div>
-                          <p className="font-medium text-gray-900">{cat.name}</p>
+                        <div style={{ paddingLeft: cat.depth * 24 }}>
+                          <p className="font-medium text-gray-900">
+                            {cat.depth > 0 && <span className="text-gray-300 mr-1">—</span>}
+                            {cat.name}
+                          </p>
                           <p className="text-xs text-gray-400 font-mono">{cat.slug}</p>
                         </div>
                       )}

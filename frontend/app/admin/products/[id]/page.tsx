@@ -69,6 +69,8 @@ function EditForm({
     margin_rate: product.margin_rate != null ? (product.margin_rate * 100).toFixed(0) : "30",
   });
 
+  const isLocked = ["moq_reached", "payment_collecting", "ordered"].includes(product.status);
+
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function set(key: keyof typeof form) {
@@ -105,6 +107,29 @@ function EditForm({
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
+    // B4: Status change confirmations
+    if (form.status !== product.status) {
+      if (form.status === "cancelled") {
+        const confirmed = window.confirm(
+          "Bu kampanyayı iptal etmek istediğinize emin misiniz? Bu işlem geri alınamaz."
+        );
+        if (!confirmed) return;
+      }
+      const STATUS_ORDER = ["draft", "active", "moq_reached", "payment_collecting", "ordered", "delivered"];
+      const oldIdx = STATUS_ORDER.indexOf(product.status);
+      const newIdx = STATUS_ORDER.indexOf(form.status);
+      if (
+        oldIdx >= STATUS_ORDER.indexOf("ordered") &&
+        newIdx >= 0 &&
+        newIdx < oldIdx
+      ) {
+        const confirmed = window.confirm(
+          "Bu durumu geriye almak istediğinize emin misiniz?"
+        );
+        if (!confirmed) return;
+      }
+    }
+
     const payload: Record<string, unknown> = {
       title: form.title.trim() || undefined,
       description: form.description.trim() || undefined,
@@ -113,18 +138,24 @@ function EditForm({
       status: form.status || undefined,
     };
 
-    // Supplier fields
-    if (form.supplier_name.trim()) payload.supplier_name = form.supplier_name.trim();
-    if (form.supplier_country.trim()) payload.supplier_country = form.supplier_country.trim();
-    if (form.alibaba_product_url.trim()) payload.alibaba_product_url = form.alibaba_product_url.trim();
-    if (form.lead_time_days) payload.lead_time_days = parseInt(form.lead_time_days, 10);
+    // B3: Supplier fields — use !== "" to allow zero values
+    if (form.supplier_name.trim() !== "") payload.supplier_name = form.supplier_name.trim();
+    if (form.supplier_country.trim() !== "") payload.supplier_country = form.supplier_country.trim();
+    if (form.alibaba_product_url.trim() !== "") payload.alibaba_product_url = form.alibaba_product_url.trim();
+    const ltd = parseInt(form.lead_time_days, 10);
+    if (form.lead_time_days !== "" && !isNaN(ltd)) payload.lead_time_days = ltd;
 
-    // Pricing fields
-    if (form.unit_price_usd) payload.unit_price_usd = parseFloat(form.unit_price_usd);
-    if (form.moq) payload.moq = parseInt(form.moq, 10);
-    if (form.shipping_cost_usd) payload.shipping_cost_usd = parseFloat(form.shipping_cost_usd);
-    if (form.customs_rate) payload.customs_rate = parseFloat(form.customs_rate) / 100;
-    if (form.margin_rate) payload.margin_rate = parseFloat(form.margin_rate) / 100;
+    // B3: Pricing fields — use !== "" and NaN checks
+    const usd = parseFloat(form.unit_price_usd);
+    if (form.unit_price_usd !== "" && !isNaN(usd)) payload.unit_price_usd = usd;
+    const moqVal = parseInt(form.moq, 10);
+    if (form.moq !== "" && !isNaN(moqVal)) payload.moq = moqVal;
+    const ship = parseFloat(form.shipping_cost_usd);
+    if (form.shipping_cost_usd !== "" && !isNaN(ship)) payload.shipping_cost_usd = ship;
+    const customs = parseFloat(form.customs_rate);
+    if (form.customs_rate !== "" && !isNaN(customs)) payload.customs_rate = customs / 100;
+    const margin = parseFloat(form.margin_rate);
+    if (form.margin_rate !== "" && !isNaN(margin)) payload.margin_rate = margin / 100;
 
     update(payload as Parameters<typeof update>[0], {
       onSuccess: () => router.push("/admin/products"),
@@ -187,39 +218,49 @@ function EditForm({
 
       {/* Supplier info */}
       <Section title="Tedarikçi Bilgileri">
+        {isLocked && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
+            Bu kampanyada ödeme süreci başlamıştır. Fiyat ve tedarikçi bilgileri değiştirilemez.
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-3">
           <Field label="Tedarikçi Adı">
-            <Input value={form.supplier_name} onChange={set("supplier_name")} placeholder="Alibaba Supplier Co." />
+            <Input value={form.supplier_name} onChange={set("supplier_name")} placeholder="Alibaba Supplier Co." disabled={isLocked} />
           </Field>
           <Field label="Tedarikçi Ülke">
-            <Input value={form.supplier_country} onChange={set("supplier_country")} placeholder="CN" />
+            <Input value={form.supplier_country} onChange={set("supplier_country")} placeholder="CN" disabled={isLocked} />
           </Field>
         </div>
         <Field label="Alibaba Ürün URL">
-          <Input value={form.alibaba_product_url} onChange={set("alibaba_product_url")} placeholder="https://alibaba.com/..." />
+          <Input value={form.alibaba_product_url} onChange={set("alibaba_product_url")} placeholder="https://alibaba.com/..." disabled={isLocked} />
         </Field>
         <Field label="Teslimat Süresi (gün)">
-          <Input type="number" value={form.lead_time_days} onChange={set("lead_time_days")} placeholder="14" min={1} />
+          <Input type="number" value={form.lead_time_days} onChange={set("lead_time_days")} placeholder="14" min={1} disabled={isLocked} />
         </Field>
       </Section>
 
       {/* Pricing */}
       <Section title="Fiyatlandırma">
+        {isLocked && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
+            Bu kampanyada ödeme süreci başlamıştır. Fiyat ve tedarikçi bilgileri değiştirilemez.
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-3">
           <Field label="Birim Fiyat (USD)">
-            <Input type="number" step="0.01" value={form.unit_price_usd} onChange={setPricing("unit_price_usd")} placeholder="10.00" min={0.01} />
+            <Input type="number" step="0.01" value={form.unit_price_usd} onChange={setPricing("unit_price_usd")} placeholder="10.00" min={0.01} disabled={isLocked} />
           </Field>
           <Field label="MOQ (minimum sipariş)">
-            <Input type="number" value={form.moq} onChange={setPricing("moq")} placeholder="100" min={1} />
+            <Input type="number" value={form.moq} onChange={setPricing("moq")} placeholder="100" min={1} disabled={isLocked} />
           </Field>
           <Field label="Kargo (USD, toplam)">
-            <Input type="number" step="0.01" value={form.shipping_cost_usd} onChange={setPricing("shipping_cost_usd")} placeholder="0" min={0} />
+            <Input type="number" step="0.01" value={form.shipping_cost_usd} onChange={setPricing("shipping_cost_usd")} placeholder="0" min={0} disabled={isLocked} />
           </Field>
           <Field label="Gümrük Oranı (%)">
-            <Input type="number" value={form.customs_rate} onChange={setPricing("customs_rate")} placeholder="35" min={0} />
+            <Input type="number" value={form.customs_rate} onChange={setPricing("customs_rate")} placeholder="35" min={0} disabled={isLocked} />
           </Field>
           <Field label="Kâr Marjı (%)">
-            <Input type="number" value={form.margin_rate} onChange={setPricing("margin_rate")} placeholder="30" min={0} />
+            <Input type="number" value={form.margin_rate} onChange={setPricing("margin_rate")} placeholder="30" min={0} disabled={isLocked} />
           </Field>
         </div>
 

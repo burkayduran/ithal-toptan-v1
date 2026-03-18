@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useAdminProducts, usePublishProduct } from "@/features/admin/hooks";
+import { useAdminProducts, usePublishProduct, useBulkPublish, useBulkCancel } from "@/features/admin/hooks";
 import { formatCurrency } from "@/lib/utils/formatCurrency";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,14 +22,51 @@ const STATUS_LABEL: Record<string, { label: string; variant: "default" | "second
 export default function AdminProductsPage() {
   const { data: products, isLoading, isError, refetch } = useAdminProducts();
   const { mutate: publish, isPending: isPublishing, variables: publishingId } = usePublishProduct();
+  const { mutate: bulkPublish, isPending: isBulkPublishing } = useBulkPublish();
+  const { mutate: bulkCancel, isPending: isBulkCancelling } = useBulkCancel();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const filtered = (products ?? []).filter((p) => {
     const matchesSearch = p.title.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === "all" || p.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
+
+  const allSelected = filtered.length > 0 && filtered.every((p) => selected.has(p.id));
+
+  function toggleAll() {
+    if (allSelected) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(filtered.map((p) => p.id)));
+    }
+  }
+
+  function toggleOne(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function handleBulkPublish() {
+    const ids = Array.from(selected);
+    bulkPublish(ids, {
+      onSuccess: () => setSelected(new Set()),
+    });
+  }
+
+  function handleBulkCancel() {
+    if (!window.confirm(`${selected.size} ürünü iptal etmek istediğinize emin misiniz?`)) return;
+    const ids = Array.from(selected);
+    bulkCancel(ids, {
+      onSuccess: () => setSelected(new Set()),
+    });
+  }
 
   return (
     <div className="p-6">
@@ -70,6 +107,31 @@ export default function AdminProductsPage() {
         </select>
       </div>
 
+      {/* Bulk action bar */}
+      {selected.size > 0 && (
+        <div className="flex items-center gap-3 mb-4 bg-blue-50 border border-blue-200 rounded-lg px-4 py-2.5 text-sm">
+          <span className="font-medium text-blue-800">{selected.size} ürün seçili</span>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs"
+            onClick={handleBulkPublish}
+            disabled={isBulkPublishing}
+          >
+            {isBulkPublishing ? <Loader2 className="h-3 w-3 animate-spin" /> : "Toplu Yayınla"}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs text-red-600 border-red-200 hover:bg-red-50"
+            onClick={handleBulkCancel}
+            disabled={isBulkCancelling}
+          >
+            {isBulkCancelling ? <Loader2 className="h-3 w-3 animate-spin" /> : "Toplu İptal Et"}
+          </Button>
+        </div>
+      )}
+
       {isLoading ? (
         <div className="text-sm text-gray-400 py-10 text-center">Yükleniyor...</div>
       ) : isError ? (
@@ -86,6 +148,14 @@ export default function AdminProductsPage() {
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
+                <th className="px-4 py-3 w-8">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    onChange={toggleAll}
+                    className="rounded border-gray-300"
+                  />
+                </th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600 text-xs">Başlık</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600 text-xs hidden md:table-cell">Durum</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600 text-xs hidden lg:table-cell">Fiyat</th>
@@ -100,6 +170,14 @@ export default function AdminProductsPage() {
                 const isThisPublishing = isPublishing && publishingId === p.id;
                 return (
                   <tr key={p.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-4 py-3">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(p.id)}
+                        onChange={() => toggleOne(p.id)}
+                        className="rounded border-gray-300"
+                      />
+                    </td>
                     <td className="px-4 py-3">
                       <p className="font-medium text-gray-900 line-clamp-1">{p.title}</p>
                     </td>

@@ -5,6 +5,8 @@ import {
   createAdminProduct,
   updateAdminProduct,
   publishAdminProduct,
+  bulkPublishProducts,
+  bulkCancelProducts,
   getAdminCategories,
   createAdminCategory,
   updateAdminCategory,
@@ -70,6 +72,28 @@ export function usePublishProduct() {
     onSuccess: (_data, id) => {
       qc.invalidateQueries({ queryKey: ["admin", "products"] });
       qc.invalidateQueries({ queryKey: ["admin", "products", id] });
+      qc.invalidateQueries({ queryKey: ["products"] });
+    },
+  });
+}
+
+export function useBulkPublish() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) => bulkPublishProducts(ids),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "products"] });
+      qc.invalidateQueries({ queryKey: ["products"] });
+    },
+  });
+}
+
+export function useBulkCancel() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) => bulkCancelProducts(ids),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "products"] });
       qc.invalidateQueries({ queryKey: ["products"] });
     },
   });

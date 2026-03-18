@@ -179,15 +179,25 @@ async def confirm_payment(
     selling_price = float(offer.selling_price_try) if offer and offer.selling_price_try else 0.0
     amount_try = round(entry.quantity * selling_price, 2)
 
+    # A7: Check price consistency — if existing payment amount differs from
+    # the current offer price, reject to prevent stale-price payments
+    payment_result = await db.execute(
+        select(Payment).where(Payment.wishlist_entry_id == entry_id)
+    )
+    payment = payment_result.scalar_one_or_none()
+
+    expected_amount = round(entry.quantity * selling_price, 2)
+    if payment and abs(float(payment.amount_try) - expected_amount) > 0.01:
+        raise HTTPException(
+            status_code=409,
+            detail="Fiyat değişmiş. Lütfen sayfayı yenileyip tekrar deneyin.",
+        )
+
     now = datetime.now(timezone.utc)
     entry.status = "paid"
     entry.paid_at = now
 
     # Ensure Payment record exists — create if initiate was skipped
-    payment_result = await db.execute(
-        select(Payment).where(Payment.wishlist_entry_id == entry_id)
-    )
-    payment = payment_result.scalar_one_or_none()
     if payment:
         payment.status = "success"
         payment.paid_at = now
@@ -205,5 +215,9 @@ async def confirm_payment(
 
     await db.commit()
     await db.refresh(entry)
+
+    # Trigger payment success email
+    from app.tasks.email_tasks import send_payment_success_email
+    send_payment_success_email.delay(str(entry_id))
 
     return await _entry_to_response(entry, db)

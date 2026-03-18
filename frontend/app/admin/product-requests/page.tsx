@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useAdminProductRequests, useUpdateProductRequest } from "@/features/admin/hooks";
 import type { AdminProductRequest } from "@/features/admin/types";
 import { Button } from "@/components/ui/button";
-import { Loader2, ChevronDown } from "lucide-react";
+import { Loader2, ChevronDown, Plus } from "lucide-react";
 
 const STATUS_OPTIONS = ["pending", "reviewing", "approved", "rejected"] as const;
 type RequestStatus = (typeof STATUS_OPTIONS)[number];
@@ -20,10 +21,12 @@ function RequestRow({
   req,
   onSave,
   isSaving,
+  onCreateProduct,
 }: {
   req: AdminProductRequest;
   onSave: (id: string, status: string, notes: string) => void;
   isSaving: boolean;
+  onCreateProduct: (req: AdminProductRequest) => void;
 }) {
   const [status, setStatus] = useState(req.status);
   const [notes, setNotes] = useState(req.admin_notes ?? "");
@@ -82,16 +85,29 @@ function RequestRow({
             placeholder="Admin notu..."
             className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400 resize-none min-w-[200px]"
           />
-          {dirty && (
-            <Button
-              size="sm"
-              className="h-7 text-xs"
-              onClick={() => onSave(req.id, status, notes)}
-              disabled={isSaving}
-            >
-              {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Kaydet"}
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            {dirty && (
+              <Button
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => onSave(req.id, status, notes)}
+                disabled={isSaving}
+              >
+                {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Kaydet"}
+              </Button>
+            )}
+            {req.status === "approved" && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs gap-1"
+                onClick={() => onCreateProduct(req)}
+              >
+                <Plus className="h-3 w-3" />
+                Ürün Oluştur
+              </Button>
+            )}
+          </div>
         </div>
       </td>
     </tr>
@@ -99,12 +115,21 @@ function RequestRow({
 }
 
 export default function AdminProductRequestsPage() {
+  const router = useRouter();
   const [activeStatus, setActiveStatus] = useState<RequestStatus>("pending");
   const { data: requests, isLoading, isError, refetch } = useAdminProductRequests(activeStatus);
   const { mutate: updateRequest, isPending: isSaving } = useUpdateProductRequest();
 
   function handleSave(id: string, status: string, admin_notes: string) {
     updateRequest({ id, payload: { status, admin_notes } });
+  }
+
+  function handleCreateProduct(req: AdminProductRequest) {
+    const params = new URLSearchParams();
+    if (req.title) params.set("title", req.title);
+    if (req.description) params.set("description", req.description);
+    params.set("from_request", req.id);
+    router.push(`/admin/products/new?${params.toString()}`);
   }
 
   return (
@@ -162,6 +187,7 @@ export default function AdminProductRequestsPage() {
                   req={req}
                   onSave={handleSave}
                   isSaving={isSaving}
+                  onCreateProduct={handleCreateProduct}
                 />
               ))}
             </tbody>

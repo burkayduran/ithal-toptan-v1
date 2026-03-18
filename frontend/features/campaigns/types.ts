@@ -1,3 +1,12 @@
+/** Generic paginated response wrapper */
+export interface PaginatedResponse<T> {
+  items: T[];
+  total: number;
+  page: number;
+  per_page: number;
+  total_pages: number;
+}
+
 /** Matches backend ProductRequest status values */
 export type ProductStatus =
   | "pending"
