@@ -105,10 +105,10 @@ async def initiate_payment(
     if not entry:
         raise HTTPException(status_code=404, detail="Entry not found")
 
-    if entry.status not in ("notified", "waiting"):
+    if entry.status != "notified":
         raise HTTPException(
             status_code=400,
-            detail=f"Cannot initiate payment for entry with status '{entry.status}'",
+            detail=f"Cannot initiate payment: entry must be in 'notified' state (current: '{entry.status}')",
         )
 
     # Compute amount
@@ -162,17 +162,28 @@ async def confirm_payment(
     if not entry:
         raise HTTPException(status_code=404, detail="Entry not found")
 
-    if entry.status not in ("notified", "waiting"):
+    if entry.status != "notified":
         raise HTTPException(
             status_code=400,
-            detail=f"Cannot confirm payment for entry with status '{entry.status}'",
+            detail=f"Cannot confirm payment: entry must be in 'notified' state (current: '{entry.status}')",
         )
+
+    # Compute amount for Payment record creation
+    offer_result = await db.execute(
+        select(SupplierOffer).where(
+            SupplierOffer.request_id == entry.request_id,
+            SupplierOffer.is_selected == True,
+        )
+    )
+    offer = offer_result.scalar_one_or_none()
+    selling_price = float(offer.selling_price_try) if offer and offer.selling_price_try else 0.0
+    amount_try = round(entry.quantity * selling_price, 2)
 
     now = datetime.now(timezone.utc)
     entry.status = "paid"
     entry.paid_at = now
 
-    # Update Payment record if present
+    # Ensure Payment record exists — create if initiate was skipped
     payment_result = await db.execute(
         select(Payment).where(Payment.wishlist_entry_id == entry_id)
     )
@@ -180,6 +191,17 @@ async def confirm_payment(
     if payment:
         payment.status = "success"
         payment.paid_at = now
+    else:
+        payment = Payment(
+            wishlist_entry_id=entry.id,
+            user_id=current_user.id,
+            request_id=entry.request_id,
+            amount_try=amount_try,
+            quantity=entry.quantity,
+            status="success",
+            paid_at=now,
+        )
+        db.add(payment)
 
     await db.commit()
     await db.refresh(entry)

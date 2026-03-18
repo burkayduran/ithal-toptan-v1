@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from uuid import UUID
 
@@ -78,7 +78,8 @@ app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
 _SSE_ALLOWED_STATUSES = {"active", "moq_reached", "payment_collecting", "ordered", "delivered"}
 
 @app.get("/api/v1/moq/progress/{request_id}")
-async def moq_progress_stream(request_id: UUID):
+@limiter.limit("30/minute")
+async def moq_progress_stream(request: Request, request_id: UUID):
     """
     Server-Sent Events endpoint for real-time MoQ progress updates.
     Frontend can use EventSource to listen for updates.

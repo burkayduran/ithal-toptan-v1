@@ -12,7 +12,11 @@ export default function Navbar() {
 
   const handleLogout = () => {
     logout();
+    // Remove all user-specific cached data to prevent stale data leaking between sessions
     queryClient.removeQueries({ queryKey: ["wishlist"] });
+    queryClient.removeQueries({ queryKey: ["payment"] });
+    queryClient.removeQueries({ queryKey: ["status"] });
+    queryClient.removeQueries({ queryKey: ["admin"] });
   };
 
   const displayName = user

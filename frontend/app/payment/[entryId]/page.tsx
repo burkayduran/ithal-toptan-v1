@@ -37,7 +37,9 @@ export default function PaymentPage({
     );
   }
 
-  const isExpired = entry.status === "expired";
+  const isDeadlinePassed =
+    !!entry.payment_deadline && new Date(entry.payment_deadline) < new Date();
+  const isExpired = entry.status === "expired" || isDeadlinePassed;
   const isPaid = entry.status === "paid";
   const thumbnail = entry.product_image ?? PLACEHOLDER_IMG;
   const pricePerUnit =
