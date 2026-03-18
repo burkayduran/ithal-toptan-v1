@@ -1,26 +1,21 @@
+import { api } from "@/lib/api/client";
 import { PaymentEntry } from "./types";
-import { getMockPaymentEntry } from "./mock";
+
+const PAYMENTS = "/api/v1/payments";
 
 export async function getPaymentEntry(entryId: string): Promise<PaymentEntry> {
-  const entry = getMockPaymentEntry(entryId);
-  if (!entry) throw new Error("Ödeme kaydı bulunamadı.");
-  return entry;
+  return api.get<PaymentEntry>(`${PAYMENTS}/entry/${entryId}`);
 }
 
 export async function getStatusEntry(entryId: string): Promise<PaymentEntry> {
-  const entry = getMockPaymentEntry(entryId);
-  if (!entry) throw new Error("Durum bilgisi bulunamadı.");
-  return entry;
+  return api.get<PaymentEntry>(`${PAYMENTS}/entry/${entryId}`);
 }
 
-/** Mock-only: simulate confirming payment for a notified entry */
+export async function initiatePayment(entryId: string): Promise<PaymentEntry> {
+  return api.post<PaymentEntry>(`${PAYMENTS}/initiate`, { entry_id: entryId });
+}
+
+/** Confirm (mock) payment — marks entry as paid on the backend. */
 export async function markPaymentAsPaid(entryId: string): Promise<PaymentEntry> {
-  const entry = getMockPaymentEntry(entryId);
-  if (!entry) throw new Error("Ödeme kaydı bulunamadı.");
-  return {
-    ...entry,
-    status: "paid",
-    stage: "payment_confirmed",
-    payment_deadline: null,
-  };
+  return api.post<PaymentEntry>(`${PAYMENTS}/entry/${entryId}/confirm`);
 }

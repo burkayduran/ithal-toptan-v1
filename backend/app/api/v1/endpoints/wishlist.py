@@ -188,45 +188,6 @@ async def add_to_wishlist(
         await redis.aclose()
 
 
-@router.delete("/{request_id}")
-async def remove_from_wishlist(
-    request_id: UUID,
-    current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """Remove product from wishlist."""
-    redis = await _get_redis_client()
-    try:
-        result = await db.execute(
-            select(WishlistEntry).where(
-                WishlistEntry.request_id == request_id,
-                WishlistEntry.user_id == current_user.id
-            )
-        )
-        entry = result.scalar_one_or_none()
-
-        if not entry:
-            raise HTTPException(status_code=404, detail="Not in wishlist")
-
-        # Can only remove if waiting or expired
-        if entry.status not in ["waiting", "expired"]:
-            raise HTTPException(
-                status_code=400,
-                detail="Cannot remove from wishlist at this stage"
-            )
-
-        await db.delete(entry)
-        await db.commit()
-
-        # Re-sync from DB aggregate to avoid Redis drift
-        moq_service = MoQService(db, redis)
-        await moq_service.sync_counter_from_db(request_id)
-
-        return {"message": "Removed from wishlist"}
-    finally:
-        await redis.aclose()
-
-
 @router.get("/my", response_model=List[WishlistResponse])
 async def get_my_wishlist(
     current_user: User = Depends(get_current_active_user),
@@ -288,6 +249,45 @@ async def get_my_wishlist(
         ))
 
     return items
+
+
+@router.delete("/{request_id}")
+async def remove_from_wishlist(
+    request_id: UUID,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Remove product from wishlist."""
+    redis = await _get_redis_client()
+    try:
+        result = await db.execute(
+            select(WishlistEntry).where(
+                WishlistEntry.request_id == request_id,
+                WishlistEntry.user_id == current_user.id
+            )
+        )
+        entry = result.scalar_one_or_none()
+
+        if not entry:
+            raise HTTPException(status_code=404, detail="Not in wishlist")
+
+        # Can only remove if waiting or expired
+        if entry.status not in ["waiting", "expired"]:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot remove from wishlist at this stage"
+            )
+
+        await db.delete(entry)
+        await db.commit()
+
+        # Re-sync from DB aggregate to avoid Redis drift
+        moq_service = MoQService(db, redis)
+        await moq_service.sync_counter_from_db(request_id)
+
+        return {"message": "Removed from wishlist"}
+    finally:
+        await redis.aclose()
 
 
 @router.get("/progress/{request_id}")

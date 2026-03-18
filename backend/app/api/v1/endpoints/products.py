@@ -23,7 +23,7 @@ router = APIRouter()
 # KATEGORİLER (ÖNCE BU - route matching için)
 # ════════════════════════════════════════════════════════════════════════════
 
-@router.get("/categories/", response_model=List[CategoryResponse])
+@router.get("/categories", response_model=List[CategoryResponse])
 async def list_categories(db: AsyncSession = Depends(get_db)):
     """Kategorileri listeler."""
     result = await db.execute(

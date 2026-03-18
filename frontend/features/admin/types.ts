@@ -1,4 +1,4 @@
-// Matches backend ProductResponse — includes draft status
+// Matches backend AdminProductDetailResponse — includes supplier/offer fields
 export interface AdminProduct {
   id: string;
   title: string;
@@ -14,6 +14,14 @@ export interface AdminProduct {
   lead_time_days: number | null;
   current_wishlist_count: number | null;
   moq_fill_percentage: number | null;
+  // Supplier / offer fields (from AdminProductDetailResponse)
+  supplier_name: string | null;
+  supplier_country: string | null;
+  alibaba_product_url: string | null;
+  unit_price_usd: number | null;
+  shipping_cost_usd: number | null;
+  customs_rate: number | null;
+  margin_rate: number | null;
 }
 
 export interface ProductCreatePayload {
@@ -38,6 +46,16 @@ export interface ProductUpdatePayload {
   category_id?: string | null;
   images?: string[];
   status?: string;
+  // Supplier / offer fields
+  unit_price_usd?: number;
+  moq?: number;
+  shipping_cost_usd?: number;
+  customs_rate?: number;
+  margin_rate?: number;
+  supplier_name?: string;
+  supplier_country?: string;
+  alibaba_product_url?: string;
+  lead_time_days?: number;
 }
 
 // Matches backend CategoryResponse

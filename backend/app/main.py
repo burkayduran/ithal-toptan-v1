@@ -10,7 +10,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from app.core.config import settings
 from app.core.limiter import limiter
 from app.db.session import engine, Base
-from app.api.v1.endpoints import auth, products, wishlist
+from app.api.v1.endpoints import auth, products, wishlist, payments
 from app.api.admin import admin
 import redis.asyncio as aioredis
 from sse_starlette.sse import EventSourceResponse
@@ -70,6 +70,7 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
 app.include_router(products.router, prefix="/api/v1/products", tags=["Products"])
 app.include_router(wishlist.router, prefix="/api/v1/wishlist", tags=["Wishlist"])
+app.include_router(payments.router, prefix="/api/v1/payments", tags=["Payments"])
 app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
 
 

@@ -150,6 +150,16 @@ class ProductUpdate(BaseModel):
     category_id: Optional[UUID] = None
     images: Optional[List[str]] = None
     status: Optional[ProductStatus] = None
+    # Supplier / offer fields (updates the selected SupplierOffer)
+    unit_price_usd: Optional[float] = None
+    moq: Optional[int] = Field(None, ge=1)
+    shipping_cost_usd: Optional[float] = Field(None, ge=0)
+    customs_rate: Optional[float] = Field(None, ge=0)
+    margin_rate: Optional[float] = Field(None, ge=0)
+    supplier_name: Optional[str] = None
+    supplier_country: Optional[str] = None
+    alibaba_product_url: Optional[str] = None
+    lead_time_days: Optional[int] = None
 
 
 class ProductResponse(BaseModel):
@@ -163,17 +173,28 @@ class ProductResponse(BaseModel):
     view_count: int
     created_at: datetime
     activated_at: Optional[datetime]
-    
+
     # Offer bilgileri
     moq: Optional[int] = None
     selling_price_try: Optional[float] = None
     lead_time_days: Optional[int] = None
-    
+
     # MoQ durumu
     current_wishlist_count: Optional[int] = None
     moq_fill_percentage: Optional[float] = None
-    
+
     model_config = ConfigDict(from_attributes=True)
+
+
+class AdminProductDetailResponse(ProductResponse):
+    """Admin-level product response — includes supplier/offer details for edit form."""
+    supplier_name: Optional[str] = None
+    supplier_country: Optional[str] = None
+    alibaba_product_url: Optional[str] = None
+    unit_price_usd: Optional[float] = None
+    shipping_cost_usd: Optional[float] = None
+    customs_rate: Optional[float] = None
+    margin_rate: Optional[float] = None
 
 
 # ─── SupplierOffer Schemas ────────────────────────────────────────────────────
@@ -264,13 +285,38 @@ class PaymentInitiate(BaseModel):
     request_id: UUID
 
 
+class PaymentInitiateRequest(BaseModel):
+    """Initiate payment for a wishlist entry."""
+    entry_id: UUID
+
+
 class PaymentResponse(BaseModel):
     id: UUID
     payment_page_url: Optional[str] = None
     amount_try: float
     status: str
     created_at: datetime
-    
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PaymentEntryResponse(BaseModel):
+    """
+    WishlistEntry-based payment view.
+    Returned by GET /api/v1/payments/entry/{entry_id} — consumed by payment
+    and status pages.
+    """
+    id: UUID                      # WishlistEntry.id
+    request_id: UUID              # ProductRequest.id
+    product_title: str
+    product_image: Optional[str] = None
+    quantity: int
+    total_amount: float
+    status: str                   # WishlistEntry status
+    payment_deadline: Optional[datetime] = None
+    stage: str                    # PaymentStage (derived)
+    lead_time_days: Optional[int] = None
+
     model_config = ConfigDict(from_attributes=True)
 
 

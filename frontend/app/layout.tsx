@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import QueryProvider from "@/components/providers/QueryProvider";
+import AuthBootstrap from "@/components/providers/AuthBootstrap";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import AuthModal from "@/components/auth/AuthModal";
@@ -21,6 +22,7 @@ export default function RootLayout({
     <html lang="tr">
       <body className="font-sans antialiased bg-white text-gray-900 flex flex-col min-h-screen">
         <QueryProvider>
+          <AuthBootstrap />
           <Navbar />
           <div className="flex-1">{children}</div>
           <Footer />

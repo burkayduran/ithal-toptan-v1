@@ -17,6 +17,7 @@ from app.schemas.schemas import (
     ProductCreate,
     ProductUpdate,
     ProductResponse,
+    AdminProductDetailResponse,
     ProductRequestResponse,
     ProductRequestUpdate,
     SupplierOfferCreate,
@@ -157,22 +158,23 @@ async def publish_product(
     return {"message": "Product published successfully", "id": str(product_id)}
 
 
-@router.patch("/products/{product_id}", response_model=ProductResponse)
+@router.patch("/products/{product_id}", response_model=AdminProductDetailResponse)
 async def update_product(
     product_id: UUID,
     data: ProductUpdate,
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
-    """Admin ürünü günceller."""
+    """Admin ürünü günceller — tedarikçi/fiyat değişirse yeniden fiyatlandırır."""
     result = await db.execute(
         select(ProductRequest).where(ProductRequest.id == product_id)
     )
     product = result.scalar_one_or_none()
-    
+
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
-    
+
+    # Update product fields
     if data.title is not None:
         product.title = data.title
     if data.description is not None:
@@ -183,10 +185,10 @@ async def update_product(
         product.images = data.images
     if data.status is not None:
         product.status = data.status
-    
+
     await db.commit()
     await db.refresh(product)
-    
+
     # Get offer
     offer_result = await db.execute(
         select(SupplierOffer).where(
@@ -195,7 +197,56 @@ async def update_product(
         )
     )
     offer = offer_result.scalar_one_or_none()
-    
+
+    # Update supplier / offer fields if provided
+    pricing_changed = any(
+        v is not None for v in [
+            data.unit_price_usd, data.moq, data.shipping_cost_usd,
+            data.customs_rate, data.margin_rate,
+        ]
+    )
+
+    if offer and (pricing_changed or any(
+        v is not None for v in [
+            data.supplier_name, data.supplier_country,
+            data.alibaba_product_url, data.lead_time_days,
+        ]
+    )):
+        if data.supplier_name is not None:
+            offer.supplier_name = data.supplier_name
+        if data.supplier_country is not None:
+            offer.supplier_country = data.supplier_country
+        if data.alibaba_product_url is not None:
+            offer.alibaba_product_url = data.alibaba_product_url
+        if data.lead_time_days is not None:
+            offer.lead_time_days = data.lead_time_days
+        if data.unit_price_usd is not None:
+            offer.unit_price_usd = data.unit_price_usd
+        if data.moq is not None:
+            offer.moq = data.moq
+        if data.shipping_cost_usd is not None:
+            offer.shipping_cost_usd = data.shipping_cost_usd
+        if data.customs_rate is not None:
+            offer.customs_rate = data.customs_rate
+        if data.margin_rate is not None:
+            offer.margin_rate = data.margin_rate
+
+        # Recalculate selling price if any pricing input changed
+        if pricing_changed:
+            calculator = PriceCalculator()
+            price_breakdown = await calculator.calculate_selling_price(
+                unit_price_usd=float(offer.unit_price_usd),
+                moq=int(offer.moq),
+                shipping_cost_usd=float(offer.shipping_cost_usd or 0),
+                customs_rate=float(offer.customs_rate or 0.35),
+                margin_rate=float(offer.margin_rate or 0.30),
+            )
+            offer.selling_price_try = float(price_breakdown.selling_price_try)
+            offer.usd_rate_used = float(price_breakdown.usd_rate)
+
+        await db.commit()
+        await db.refresh(offer)
+
     # Get wishlist count
     count_result = await db.execute(
         select(func.coalesce(func.sum(WishlistEntry.quantity), 0)).where(
@@ -204,7 +255,7 @@ async def update_product(
         )
     )
     wishlist_count = count_result.scalar() or 0
-    
+
     product_dict = {
         "id": product.id,
         "title": product.title,
@@ -220,9 +271,17 @@ async def update_product(
         "lead_time_days": offer.lead_time_days if offer else None,
         "current_wishlist_count": wishlist_count,
         "moq_fill_percentage": round(wishlist_count / offer.moq * 100, 1) if offer and offer.moq else None,
+        # Supplier / offer detail
+        "supplier_name": offer.supplier_name if offer else None,
+        "supplier_country": offer.supplier_country if offer else None,
+        "alibaba_product_url": offer.alibaba_product_url if offer else None,
+        "unit_price_usd": float(offer.unit_price_usd) if offer and offer.unit_price_usd else None,
+        "shipping_cost_usd": float(offer.shipping_cost_usd) if offer and offer.shipping_cost_usd else None,
+        "customs_rate": float(offer.customs_rate) if offer and offer.customs_rate else None,
+        "margin_rate": float(offer.margin_rate) if offer and offer.margin_rate else None,
     }
-    
-    return ProductResponse(**product_dict)
+
+    return AdminProductDetailResponse(**product_dict)
 
 
 @router.get("/products", response_model=List[ProductResponse])
@@ -278,13 +337,13 @@ async def list_all_products(
     return enriched
 
 
-@router.get("/products/{product_id}", response_model=ProductResponse)
+@router.get("/products/{product_id}", response_model=AdminProductDetailResponse)
 async def get_product(
     product_id: UUID,
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
-    """Admin tek ürünü getirir (draft dahil)."""
+    """Admin tek ürünü getirir (draft dahil) — tedarikçi/fiyat alanları dahil."""
     result = await db.execute(
         select(ProductRequest).where(ProductRequest.id == product_id)
     )
@@ -309,7 +368,7 @@ async def get_product(
     )
     wishlist_count = count_result.scalar() or 0
 
-    return ProductResponse(
+    return AdminProductDetailResponse(
         id=product.id,
         title=product.title,
         description=product.description,
@@ -324,6 +383,14 @@ async def get_product(
         lead_time_days=offer.lead_time_days if offer else None,
         current_wishlist_count=wishlist_count,
         moq_fill_percentage=round(wishlist_count / offer.moq * 100, 1) if offer and offer.moq else None,
+        # Supplier / offer detail fields
+        supplier_name=offer.supplier_name if offer else None,
+        supplier_country=offer.supplier_country if offer else None,
+        alibaba_product_url=offer.alibaba_product_url if offer else None,
+        unit_price_usd=float(offer.unit_price_usd) if offer and offer.unit_price_usd else None,
+        shipping_cost_usd=float(offer.shipping_cost_usd) if offer and offer.shipping_cost_usd else None,
+        customs_rate=float(offer.customs_rate) if offer and offer.customs_rate else None,
+        margin_rate=float(offer.margin_rate) if offer and offer.margin_rate else None,
     )
 
 

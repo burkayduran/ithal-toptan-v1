@@ -3,17 +3,12 @@
 import Link from "next/link";
 import { useAuthStore } from "@/features/auth/store";
 import { Button } from "@/components/ui/button";
-import { ShoppingBag, User, LogOut } from "lucide-react";
-import { useEffect } from "react";
+import { ShoppingBag, User, LogOut, Settings } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 
 export default function Navbar() {
-  const { user, isHydrated, hydrate, logout, openAuthModal } = useAuthStore();
+  const { user, isHydrated, logout, openAuthModal } = useAuthStore();
   const queryClient = useQueryClient();
-
-  useEffect(() => {
-    hydrate();
-  }, [hydrate]);
 
   const handleLogout = () => {
     logout();
@@ -44,6 +39,15 @@ export default function Navbar() {
           <Link href="/my-campaigns" className="hover:text-gray-900 transition-colors">
             Siparişlerim
           </Link>
+          {user?.is_admin && (
+            <Link
+              href="/admin"
+              className="flex items-center gap-1 text-purple-600 hover:text-purple-800 transition-colors font-semibold"
+            >
+              <Settings className="h-3.5 w-3.5" />
+              Admin
+            </Link>
+          )}
         </nav>
 
         <div className="flex items-center gap-3">
