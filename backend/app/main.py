@@ -97,10 +97,10 @@ async def moq_progress_stream(request: Request, request_id: UUID):
             sa_select(ProductRequest.status).where(ProductRequest.id == request_id)
         )
         row = result.scalar_one_or_none()
-        if row is None:
-            raise HTTPException(status_code=404, detail="Product not found")
-        if row not in _SSE_ALLOWED_STATUSES:
-            raise HTTPException(status_code=403, detail="Product is not publicly accessible")
+        # Uniform 404 for both missing and non-public products to avoid
+        # confirming whether a product exists at all
+        if row is None or row not in _SSE_ALLOWED_STATUSES:
+            raise HTTPException(status_code=404, detail="Not found")
 
     async def event_generator():
         # Subscribe to Redis pub/sub channel

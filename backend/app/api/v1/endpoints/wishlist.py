@@ -1,7 +1,7 @@
 """
 Wishlist endpoints - Add/remove from wishlist, MoQ tracking
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.dialects.postgresql import insert
@@ -15,7 +15,11 @@ from app.models.models import User, ProductRequest, WishlistEntry, SupplierOffer
 from app.schemas.schemas import WishlistAdd, WishlistResponse
 from app.core.auth import get_current_active_user
 from app.core.config import settings
+from app.core.limiter import limiter
 from app.services.moq_service import MoQService
+
+# Statuses that may expose progress data to the public
+_PROGRESS_ALLOWED_STATUSES = {"active", "moq_reached", "payment_collecting"}
 
 router = APIRouter()
 
@@ -291,24 +295,37 @@ async def remove_from_wishlist(
 
 
 @router.get("/progress/{request_id}")
+@limiter.limit("60/minute")
 async def get_moq_progress(
+    request: Request,
     request_id: UUID,
     db: AsyncSession = Depends(get_db),
 ):
-    """Get current MoQ progress for a product."""
+    """Get current MoQ progress for a product (public, rate-limited)."""
     redis = await _get_redis_client()
     try:
+        # Verify product exists and is publicly discoverable — same check as product listing
+        product_result = await db.execute(
+            select(ProductRequest.status).where(ProductRequest.id == request_id)
+        )
+        product_status = product_result.scalar_one_or_none()
+
+        # Use a uniform 404 for both missing and non-public products
+        # to avoid revealing whether a product exists at all
+        if product_status is None or product_status not in _PROGRESS_ALLOWED_STATUSES:
+            raise HTTPException(status_code=404, detail="Not found")
+
         # Get offer
         offer_result = await db.execute(
             select(SupplierOffer).where(
                 SupplierOffer.request_id == request_id,
-                SupplierOffer.is_selected == True
+                SupplierOffer.is_selected == True,
             )
         )
         offer = offer_result.scalar_one_or_none()
 
         if not offer:
-            raise HTTPException(status_code=404, detail="No active offer for this product")
+            raise HTTPException(status_code=404, detail="Not found")
 
         # Get current count
         moq_service = MoQService(db, redis)
@@ -319,7 +336,7 @@ async def get_moq_progress(
             "current": current,
             "target": offer.moq,
             "percentage": round(current / offer.moq * 100, 1) if offer.moq else 0,
-            "selling_price_try": float(offer.selling_price_try) if offer.selling_price_try else None
+            "selling_price_try": float(offer.selling_price_try) if offer.selling_price_try else None,
         }
     finally:
         await redis.aclose()
