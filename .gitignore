@@ -39,6 +39,7 @@ htmlcov/
 
 # Alembic
 alembic/versions/*.pyc
+backend/alembic/versions/__pycache__/
 
 # Claude Code
 .claude/

@@ -14,7 +14,7 @@ from app.core.redis import get_redis, close_redis
 
 # Initialize logging
 setup_logging()
-from app.db.session import engine, Base
+from app.db.session import engine
 from app.api.v1.endpoints import auth, products, wishlist, payments
 from app.api.admin import admin
 from sse_starlette.sse import EventSourceResponse
@@ -27,13 +27,11 @@ logger = logging.getLogger("ithal_toptan")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup/shutdown events."""
-    # Startup: Create tables
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
     # Initialize Redis pool and verify
     redis_client = await get_redis()
     await redis_client.ping()
+
+    logger.info("Application startup complete")
 
     yield
 
