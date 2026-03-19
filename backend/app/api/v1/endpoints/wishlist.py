@@ -135,6 +135,43 @@ async def add_to_wishlist(
         await db.rollback()
         raise HTTPException(status_code=409, detail="Wishlist update conflict, please retry")
 
+    # Dual-write: shadow join (fire-and-forget, separate mini-commit)
+    try:
+        from app.services.dual_write_service import DualWriteService
+        dw = DualWriteService(db)
+
+        offer_for_dw = await db.execute(
+            select(SupplierOffer).where(
+                SupplierOffer.request_id == data.request_id,
+                SupplierOffer.is_selected == True,
+            )
+        )
+        dw_offer = offer_for_dw.scalar_one_or_none()
+        dw_selling_price = float(dw_offer.selling_price_try) if dw_offer and dw_offer.selling_price_try else None
+
+        # Re-fetch entry to get its id
+        entry_result_dw = await db.execute(
+            select(WishlistEntry).where(
+                WishlistEntry.request_id == data.request_id,
+                WishlistEntry.user_id == current_user.id,
+            )
+        )
+        entry_dw = entry_result_dw.scalar_one_or_none()
+
+        if entry_dw:
+            await dw.shadow_join_wishlist(
+                legacy_request_id=data.request_id,
+                legacy_entry_id=entry_dw.id,
+                user_id=current_user.id,
+                quantity=data.quantity,
+                status=entry_dw.status,
+                selling_price_try=dw_selling_price,
+            )
+            await db.commit()
+    except Exception:
+        import logging
+        logging.getLogger("dual_write").exception("shadow_join_wishlist endpoint failed")
+
     # Side effects run only after a successful commit
     moq_service = MoQService(db, redis)
     await moq_service.sync_counter_from_db(data.request_id)

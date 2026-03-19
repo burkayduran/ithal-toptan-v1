@@ -64,6 +64,22 @@ async def create_product_request(
     )
     
     db.add(product_request)
+
+    # Dual-write: shadow suggestion
+    try:
+        from app.services.dual_write_service import DualWriteService
+        dw = DualWriteService(db)
+        await dw.shadow_create_suggestion(
+            title=data.title,
+            description=data.description,
+            category_id=data.category_id,
+            reference_url=data.reference_url,
+            expected_price_try=data.expected_price_try,
+            created_by=current_user.id,
+        )
+    except Exception:
+        pass
+
     await db.commit()
     await db.refresh(product_request)
     

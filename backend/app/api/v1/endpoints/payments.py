@@ -213,6 +213,22 @@ async def confirm_payment(
         )
         db.add(payment)
 
+    # Dual-write: shadow confirm payment
+    try:
+        from app.services.dual_write_service import DualWriteService
+        dw = DualWriteService(db)
+        await dw.shadow_confirm_payment(
+            legacy_entry_id=entry.id,
+            legacy_payment_id=payment.id,
+            legacy_request_id=entry.request_id,
+            user_id=current_user.id,
+            amount_try=float(payment.amount_try),
+            quantity=payment.quantity,
+            offer=offer,
+        )
+    except Exception:
+        pass
+
     await db.commit()
     await db.refresh(entry)
 

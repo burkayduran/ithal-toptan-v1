@@ -205,6 +205,19 @@ return val
                 )
             )
 
+        # Dual-write: shadow moq_reached
+        try:
+            from app.services.dual_write_service import DualWriteService
+            dw = DualWriteService(self.db)
+            await dw.shadow_moq_reached(
+                legacy_request_id=request_id,
+                moq_reached_at=now,
+                payment_deadline=deadline,
+            )
+        except Exception:
+            import logging
+            logging.getLogger("dual_write").exception("shadow_moq_reached failed")
+
         # TEK COMMIT — status + wishlist + notification hepsi atomik
         await self.db.commit()
 

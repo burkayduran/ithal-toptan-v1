@@ -89,7 +89,23 @@ async def create_product(
         is_selected=True  # Otomatik seçili (tek teklif var)
     )
     db.add(offer)
-    
+
+    # Dual-write: shadow to new domain tables
+    try:
+        from app.services.dual_write_service import DualWriteService
+        dw = DualWriteService(db)
+        await dw.shadow_create_product(
+            legacy_request_id=product.id,
+            title=product.title,
+            description=product.description,
+            category_id=product.category_id,
+            images=product.images or [],
+            created_by=product.created_by,
+            offer=offer,
+        )
+    except Exception:
+        pass  # logged inside service
+
     await db.commit()
     await db.refresh(product)
     
@@ -154,7 +170,18 @@ async def publish_product(
     # Publish
     product.status = "active"
     product.activated_at = datetime.now(timezone.utc)
-    
+
+    # Dual-write: shadow publish
+    try:
+        from app.services.dual_write_service import DualWriteService
+        dw = DualWriteService(db)
+        await dw.shadow_publish(
+            legacy_request_id=product.id,
+            activated_at=product.activated_at,
+        )
+    except Exception:
+        pass
+
     await db.commit()
     
     return {"message": "Product published successfully", "id": str(product_id)}
@@ -259,6 +286,20 @@ async def update_product(
             )
             offer.selling_price_try = float(price_breakdown.selling_price_try)
             offer.usd_rate_used = float(price_breakdown.usd_rate)
+
+        # Dual-write: shadow update
+        try:
+            from app.services.dual_write_service import DualWriteService
+            dw = DualWriteService(db)
+            await dw.shadow_update_product(
+                legacy_request_id=product.id,
+                offer=offer,
+                title=data.title,
+                description=data.description,
+                images=data.images,
+            )
+        except Exception:
+            pass
 
         await db.commit()
         await db.refresh(offer)
