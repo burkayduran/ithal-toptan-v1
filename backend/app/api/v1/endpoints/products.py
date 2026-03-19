@@ -116,7 +116,13 @@ async def list_products(
     products = result.scalars().all()
 
     if not products:
-        return []
+        return PaginatedProductResponse(
+            items=[],
+            total=total,
+            page=page,
+            per_page=per_page,
+            total_pages=0,
+        )
 
     product_ids = [p.id for p in products]
 

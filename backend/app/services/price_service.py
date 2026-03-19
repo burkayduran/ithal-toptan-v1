@@ -6,8 +6,12 @@ from decimal import Decimal
 from typing import Optional
 import httpx
 
+import logging
+
 from app.core.config import settings
 from app.schemas.schemas import PriceBreakdown
+
+logger = logging.getLogger("ithal_toptan")
 
 
 class PriceCalculator:
@@ -33,7 +37,7 @@ class PriceCalculator:
             #     return rate
             return fallback
         except Exception as e:
-            print(f"USD rate fetch error: {e}")
+            logger.error("USD rate fetch error: %s", e)
             return fallback
 
     async def calculate_selling_price(

@@ -1,9 +1,12 @@
 """
 Email Service using Resend API
 """
+import logging
 from typing import List, Dict, Optional
 import resend
 from app.core.config import settings
+
+logger = logging.getLogger("ithal_toptan")
 
 # Initialize Resend
 if settings.RESEND_API_KEY:
@@ -33,11 +36,11 @@ class EmailService:
             Response from Resend API
         """
         if settings.EMAIL_PROVIDER == "fake":
-            print(f"🧪 Fake email provider: pretending to send email to {to}")
+            logger.info("Fake email provider: pretending to send email to %s", to)
             return {"status": "sent", "provider": "fake", "id": f"fake-{to}"}
 
         if not settings.RESEND_API_KEY:
-            print(f"⚠️ RESEND_API_KEY not set. Email not sent to {to}")
+            logger.warning("RESEND_API_KEY not set. Email not sent to %s", to)
             return {"status": "skipped", "reason": "no_api_key"}
         
         try:
@@ -49,11 +52,11 @@ class EmailService:
             }
             
             response = resend.Emails.send(params)
-            print(f"✅ Email sent to {to}: {response}")
+            logger.info("Email sent to %s: %s", to, response)
             return response
         
         except Exception as e:
-            print(f"❌ Email send failed to {to}: {str(e)}")
+            logger.error("Email send failed to %s: %s", to, e)
             return {"status": "error", "error": str(e)}
     
     @staticmethod
