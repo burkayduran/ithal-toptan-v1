@@ -17,6 +17,8 @@ setup_logging()
 from app.db.session import engine
 from app.api.v1.endpoints import auth, products, wishlist, payments
 from app.api.admin import admin
+from app.api.v2 import campaigns as v2_campaigns, suggestions as v2_suggestions, payments as v2_payments
+from app.api.admin import admin_v2
 from sse_starlette.sse import EventSourceResponse
 import asyncio
 import logging
@@ -70,6 +72,12 @@ app.include_router(products.router, prefix="/api/v1/products", tags=["Products"]
 app.include_router(wishlist.router, prefix="/api/v1/wishlist", tags=["Wishlist"])
 app.include_router(payments.router, prefix="/api/v1/payments", tags=["Payments"])
 app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
+
+# V2 routers
+app.include_router(v2_campaigns.router, prefix="/api/v2/campaigns", tags=["V2 Campaigns"])
+app.include_router(v2_suggestions.router, prefix="/api/v2/suggestions", tags=["V2 Suggestions"])
+app.include_router(v2_payments.router, prefix="/api/v2/payments", tags=["V2 Payments"])
+app.include_router(admin_v2.router, prefix="/api/v2/admin", tags=["V2 Admin"])
 
 
 # SSE endpoint for real-time MoQ progress
