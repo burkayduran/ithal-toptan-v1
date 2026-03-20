@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useAdminProducts } from "@/features/admin/hooks";
-import { useAdminProductRequests } from "@/features/admin/hooks";
+import { useAdminCampaigns } from "@/features/admin/hooks";
+import { useAdminSuggestions } from "@/features/admin/hooks";
 import { Package, Tags, ClipboardList, ArrowRight } from "lucide-react";
 
 function StatCard({
@@ -24,16 +24,16 @@ function StatCard({
 }
 
 export default function AdminDashboard() {
-  const { data: products } = useAdminProducts();
-  const { data: pendingRequests } = useAdminProductRequests("pending");
+  const { data: campaigns } = useAdminCampaigns();
+  const { data: pendingSuggestions } = useAdminSuggestions("pending");
 
-  const total = products?.length ?? 0;
-  const draft = products?.filter((p) => p.status === "draft").length ?? 0;
-  const active = products?.filter((p) => p.status === "active").length ?? 0;
-  const pending = pendingRequests?.length ?? 0;
-  const moqReached = products?.filter((p) => p.status === "moq_reached").length ?? 0;
-  const paymentCollecting = products?.filter((p) => p.status === "payment_collecting").length ?? 0;
-  const ordered = products?.filter((p) => p.status === "ordered").length ?? 0;
+  const total = campaigns?.length ?? 0;
+  const draft = campaigns?.filter((p) => p.status === "draft").length ?? 0;
+  const active = campaigns?.filter((p) => p.status === "active").length ?? 0;
+  const pending = pendingSuggestions?.length ?? 0;
+  const moqReached = campaigns?.filter((p) => p.status === "moq_reached").length ?? 0;
+  const paymentCollecting = campaigns?.filter((p) => p.status === "payment_collecting").length ?? 0;
+  const ordered = campaigns?.filter((p) => p.status === "ordered").length ?? 0;
 
   const SHORTCUTS = [
     {

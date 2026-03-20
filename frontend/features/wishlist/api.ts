@@ -1,17 +1,19 @@
 import { api } from "@/lib/api/client";
-import { WishlistEntry } from "./types";
+import { Participant } from "./types";
 
-export async function getMyWishlist(): Promise<WishlistEntry[]> {
-  return api.get<WishlistEntry[]>("/api/v1/wishlist/my");
+const V2 = "/api/v2";
+
+export async function getMyParticipations(): Promise<Participant[]> {
+  return api.get<Participant[]>(`${V2}/campaigns/my`);
 }
 
-export async function addToWishlist(
-  request_id: string,
+export async function joinCampaign(
+  campaignId: string,
   quantity: number
-): Promise<WishlistEntry> {
-  return api.post<WishlistEntry>("/api/v1/wishlist/add", { request_id, quantity });
+): Promise<Participant> {
+  return api.post<Participant>(`${V2}/campaigns/${campaignId}/join`, { quantity });
 }
 
-export async function removeFromWishlist(request_id: string): Promise<void> {
-  return api.delete(`/api/v1/wishlist/${request_id}`);
+export async function leaveCampaign(campaignId: string): Promise<void> {
+  return api.delete(`${V2}/campaigns/${campaignId}/leave`);
 }

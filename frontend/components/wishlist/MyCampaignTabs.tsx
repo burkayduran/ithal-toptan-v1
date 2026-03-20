@@ -2,14 +2,14 @@
 
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { WishlistEntry } from "@/features/wishlist/types";
+import { Participant } from "@/features/wishlist/types";
 import MyCampaignCard from "./MyCampaignCard";
 import EmptyState from "@/components/common/EmptyState";
 
 interface TabDef {
   value: string;
   label: string;
-  statuses: WishlistEntry["status"][];
+  statuses: Participant["status"][];
   emptyTitle: string;
   emptyDescription: string;
 }
@@ -18,14 +18,14 @@ const TABS: TabDef[] = [
   {
     value: "active",
     label: "Aktif",
-    statuses: ["waiting"],
+    statuses: ["joined"],
     emptyTitle: "Aktif kampanyanız yok",
     emptyDescription: "Bekleme listesine katıldığınız aktif kampanyalar burada görünür.",
   },
   {
     value: "payment",
     label: "Ödeme Gerekli",
-    statuses: ["notified"],
+    statuses: ["invited"],
     emptyTitle: "Ödeme bekleyen kampanya yok",
     emptyDescription: "MOQ'ya ulaşan ve ödeme bildirimi gelen kampanyalar burada görünür.",
   },
@@ -51,10 +51,10 @@ const TABS: TabDef[] = [
  */
 const DEFAULT_TAB_PRIORITY = ["payment", "active", "paid", "closed"] as const;
 
-function getInitialTab(entries: WishlistEntry[]): string {
+function getInitialTab(participants: Participant[]): string {
   for (const tabValue of DEFAULT_TAB_PRIORITY) {
     const tab = TABS.find((t) => t.value === tabValue);
-    if (tab && entries.some((e) => (tab.statuses as string[]).includes(e.status))) {
+    if (tab && participants.some((p) => (tab.statuses as string[]).includes(p.status))) {
       return tabValue;
     }
   }
@@ -62,19 +62,19 @@ function getInitialTab(entries: WishlistEntry[]): string {
 }
 
 interface MyCampaignTabsProps {
-  entries: WishlistEntry[];
+  participants: Participant[];
 }
 
-export default function MyCampaignTabs({ entries }: MyCampaignTabsProps) {
+export default function MyCampaignTabs({ participants }: MyCampaignTabsProps) {
   // Computed once at mount — the tab with the most urgent / populated state opens first
-  const [currentTab, setCurrentTab] = useState<string>(() => getInitialTab(entries));
+  const [currentTab, setCurrentTab] = useState<string>(() => getInitialTab(participants));
 
   return (
     <Tabs value={currentTab} onValueChange={setCurrentTab} className="space-y-6">
       <TabsList className="grid w-full grid-cols-4">
         {TABS.map((tab) => {
-          const count = entries.filter((e) =>
-            (tab.statuses as string[]).includes(e.status)
+          const count = participants.filter((p) =>
+            (tab.statuses as string[]).includes(p.status)
           ).length;
           return (
             <TabsTrigger
@@ -94,8 +94,8 @@ export default function MyCampaignTabs({ entries }: MyCampaignTabsProps) {
       </TabsList>
 
       {TABS.map((tab) => {
-        const filtered = entries.filter((e) =>
-          (tab.statuses as string[]).includes(e.status)
+        const filtered = participants.filter((p) =>
+          (tab.statuses as string[]).includes(p.status)
         );
         return (
           <TabsContent key={tab.value} value={tab.value}>
@@ -109,8 +109,8 @@ export default function MyCampaignTabs({ entries }: MyCampaignTabsProps) {
               />
             ) : (
               <div className="space-y-4">
-                {filtered.map((entry) => (
-                  <MyCampaignCard key={entry.id} entry={entry} />
+                {filtered.map((participant) => (
+                  <MyCampaignCard key={participant.id} participant={participant} />
                 ))}
               </div>
             )}

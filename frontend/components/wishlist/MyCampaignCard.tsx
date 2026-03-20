@@ -2,28 +2,28 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { WishlistEntry } from "@/features/wishlist/types";
+import { Participant } from "@/features/wishlist/types";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import StatusBadge from "@/components/campaign/StatusBadge";
 import CountdownBlock from "@/components/campaign/CountdownBlock";
 import { formatCurrency } from "@/lib/utils/formatCurrency";
-import { useRemoveFromWishlist } from "@/features/wishlist/hooks";
+import { useLeaveCampaign } from "@/features/wishlist/hooks";
 import { Loader2, Trash2 } from "lucide-react";
 
 const PLACEHOLDER_IMG =
   "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&q=80";
 
 interface MyCampaignCardProps {
-  entry: WishlistEntry;
+  participant: Participant;
 }
 
-export default function MyCampaignCard({ entry }: MyCampaignCardProps) {
-  const thumbnail = entry.product_image ?? PLACEHOLDER_IMG;
-  const title = entry.product_title ?? "Ürün";
-  const { mutate: remove, isPending: isRemoving } = useRemoveFromWishlist();
+export default function MyCampaignCard({ participant }: MyCampaignCardProps) {
+  const thumbnail = participant.campaign_image ?? PLACEHOLDER_IMG;
+  const title = participant.campaign_title ?? "Ürün";
+  const { mutate: remove, isPending: isRemoving } = useLeaveCampaign();
 
-  const canRemove = entry.status === "waiting" || entry.status === "expired";
+  const canRemove = participant.status === "joined" || participant.status === "expired";
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-sm transition-shadow space-y-4">
@@ -38,24 +38,24 @@ export default function MyCampaignCard({ entry }: MyCampaignCardProps) {
             <h3 className="font-semibold text-gray-900 text-sm leading-snug line-clamp-2 flex-1">
               {title}
             </h3>
-            <StatusBadge status={entry.status} className="shrink-0" />
+            <StatusBadge status={participant.status} className="shrink-0" />
           </div>
 
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
-            <span>{entry.quantity} adet</span>
-            {entry.selling_price_try != null && (
+            <span>{participant.quantity} adet</span>
+            {participant.selling_price_try != null && (
               <>
                 <span className="text-gray-300">·</span>
                 <span className="font-medium text-gray-700">
-                  {formatCurrency(entry.selling_price_try)} / adet
+                  {formatCurrency(participant.selling_price_try)} / adet
                 </span>
               </>
             )}
-            {entry.total_amount != null && (
+            {participant.total_amount != null && (
               <>
                 <span className="text-gray-300">·</span>
                 <span className="font-semibold text-gray-900">
-                  Toplam: {formatCurrency(entry.total_amount)}
+                  Toplam: {formatCurrency(participant.total_amount)}
                 </span>
               </>
             )}
@@ -63,35 +63,35 @@ export default function MyCampaignCard({ entry }: MyCampaignCardProps) {
         </div>
       </div>
 
-      {/* Middle: MOQ fill percentage bar (waiting) or payment countdown (notified) */}
-      {entry.status === "waiting" && entry.moq_fill_percentage != null && (
+      {/* Middle: MOQ fill percentage bar (joined) or payment countdown (invited) */}
+      {participant.status === "joined" && participant.moq_fill_percentage != null && (
         <div className="space-y-1">
           <div className="flex justify-between text-xs">
             <span className="text-gray-500">Hedef dolum</span>
             <span className="font-semibold text-gray-700">
-              {entry.moq_fill_percentage}%
+              {participant.moq_fill_percentage}%
             </span>
           </div>
-          <Progress value={entry.moq_fill_percentage} className="h-1.5" />
+          <Progress value={participant.moq_fill_percentage} className="h-1.5" />
         </div>
       )}
 
-      {entry.status === "notified" && entry.payment_deadline && (
+      {participant.status === "invited" && participant.payment_deadline && (
         <div className="flex items-center gap-2 text-xs text-gray-500">
           <span>Kalan süre:</span>
-          <CountdownBlock deadline={entry.payment_deadline} compact />
+          <CountdownBlock deadline={participant.payment_deadline} compact />
         </div>
       )}
 
       {/* CTAs */}
       <div className="flex flex-wrap items-center gap-2">
-        <PrimaryAction entry={entry} />
+        <PrimaryAction participant={participant} />
         {canRemove && (
           <Button
             variant="ghost"
             size="sm"
             className="text-red-500 hover:text-red-700 hover:bg-red-50 gap-1.5"
-            onClick={() => remove(entry.request_id)}
+            onClick={() => remove(participant.campaign_id)}
             disabled={isRemoving}
           >
             {isRemoving ? (
@@ -107,11 +107,11 @@ export default function MyCampaignCard({ entry }: MyCampaignCardProps) {
   );
 }
 
-function PrimaryAction({ entry }: { entry: WishlistEntry }) {
-  switch (entry.status) {
-    case "notified":
+function PrimaryAction({ participant }: { participant: Participant }) {
+  switch (participant.status) {
+    case "invited":
       return (
-        <Link href={`/payment/${entry.id}`}>
+        <Link href={`/payment/${participant.id}`}>
           <Button size="sm" className="gap-1.5 bg-amber-600 hover:bg-amber-700 text-white">
             Ödeme Yap →
           </Button>
@@ -119,7 +119,7 @@ function PrimaryAction({ entry }: { entry: WishlistEntry }) {
       );
     case "paid":
       return (
-        <Link href={`/status/${entry.id}`}>
+        <Link href={`/status/${participant.id}`}>
           <Button size="sm" variant="outline" className="gap-1.5">
             Durumu Gör →
           </Button>
@@ -127,7 +127,7 @@ function PrimaryAction({ entry }: { entry: WishlistEntry }) {
       );
     case "expired":
       return (
-        <Link href={`/campaigns/${entry.request_id}`}>
+        <Link href={`/campaigns/${participant.campaign_id}`}>
           <Button size="sm" variant="outline" className="gap-1.5 text-gray-500">
             Kampanyayı Gör →
           </Button>
@@ -135,7 +135,7 @@ function PrimaryAction({ entry }: { entry: WishlistEntry }) {
       );
     default:
       return (
-        <Link href={`/campaigns/${entry.request_id}`}>
+        <Link href={`/campaigns/${participant.campaign_id}`}>
           <Button size="sm" variant="outline" className="gap-1.5">
             Kampanyayı Gör →
           </Button>

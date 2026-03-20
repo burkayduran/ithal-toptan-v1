@@ -1,105 +1,104 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  getAdminProducts,
-  getAdminProduct,
-  createAdminProduct,
-  updateAdminProduct,
-  publishAdminProduct,
-  bulkPublishProducts,
-  bulkCancelProducts,
+  getAdminCampaigns,
+  getAdminCampaign,
+  createAdminCampaign,
+  updateAdminCampaign,
+  publishAdminCampaign,
+  bulkPublishCampaigns,
+  bulkCancelCampaigns,
   getAdminCategories,
   createAdminCategory,
   updateAdminCategory,
   deleteAdminCategory,
-  getAdminProductRequests,
-  updateAdminProductRequest,
+  getAdminSuggestions,
+  updateAdminSuggestion,
   calculatePricePreview,
 } from "./api";
 import type {
-  ProductCreatePayload,
-  ProductUpdatePayload,
+  CampaignCreatePayload,
+  CampaignUpdatePayload,
   CategoryCreatePayload,
   CategoryUpdatePayload,
-  ProductRequestUpdatePayload,
+  SuggestionUpdatePayload,
   PricePreviewPayload,
 } from "./types";
 
-// ── Products ──────────────────────────────────────────────────────────────
+// ── Campaigns ─────────────────────────────────────────────────────────────
 
-export function useAdminProducts() {
+export function useAdminCampaigns() {
   return useQuery({
-    queryKey: ["admin", "products"],
-    queryFn: getAdminProducts,
+    queryKey: ["admin", "campaigns"],
+    queryFn: getAdminCampaigns,
   });
 }
 
-export function useAdminProduct(id: string) {
+export function useAdminCampaign(id: string) {
   return useQuery({
-    queryKey: ["admin", "products", id],
-    queryFn: () => getAdminProduct(id),
+    queryKey: ["admin", "campaigns", id],
+    queryFn: () => getAdminCampaign(id),
     enabled: !!id,
   });
 }
 
-export function useCreateProduct() {
+export function useCreateCampaign() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (payload: ProductCreatePayload) => createAdminProduct(payload),
+    mutationFn: (payload: CampaignCreatePayload) => createAdminCampaign(payload),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin", "products"] });
+      qc.invalidateQueries({ queryKey: ["admin", "campaigns"] });
     },
   });
 }
 
-export function useUpdateProduct(id: string) {
+export function useUpdateCampaign(id: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (payload: ProductUpdatePayload) => updateAdminProduct(id, payload),
+    mutationFn: (payload: CampaignUpdatePayload) => updateAdminCampaign(id, payload),
     onSuccess: (data) => {
-      qc.invalidateQueries({ queryKey: ["admin", "products"] });
-      qc.setQueryData(["admin", "products", id], data);
-      // Also invalidate public product cache
-      qc.invalidateQueries({ queryKey: ["product", id] });
-      qc.invalidateQueries({ queryKey: ["products"] });
+      qc.invalidateQueries({ queryKey: ["admin", "campaigns"] });
+      qc.setQueryData(["admin", "campaigns", id], data);
+      qc.invalidateQueries({ queryKey: ["campaign", id] });
+      qc.invalidateQueries({ queryKey: ["campaigns"] });
     },
   });
 }
 
-export function usePublishProduct() {
+export function usePublishCampaign() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => publishAdminProduct(id),
+    mutationFn: (id: string) => publishAdminCampaign(id),
     onSuccess: (_data, id) => {
-      qc.invalidateQueries({ queryKey: ["admin", "products"] });
-      qc.invalidateQueries({ queryKey: ["admin", "products", id] });
-      qc.invalidateQueries({ queryKey: ["products"] });
+      qc.invalidateQueries({ queryKey: ["admin", "campaigns"] });
+      qc.invalidateQueries({ queryKey: ["admin", "campaigns", id] });
+      qc.invalidateQueries({ queryKey: ["campaigns"] });
     },
   });
 }
 
-export function useBulkPublish() {
+export function useBulkPublishCampaigns() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (ids: string[]) => bulkPublishProducts(ids),
+    mutationFn: (ids: string[]) => bulkPublishCampaigns(ids),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin", "products"] });
-      qc.invalidateQueries({ queryKey: ["products"] });
+      qc.invalidateQueries({ queryKey: ["admin", "campaigns"] });
+      qc.invalidateQueries({ queryKey: ["campaigns"] });
     },
   });
 }
 
-export function useBulkCancel() {
+export function useBulkCancelCampaigns() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (ids: string[]) => bulkCancelProducts(ids),
+    mutationFn: (ids: string[]) => bulkCancelCampaigns(ids),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin", "products"] });
-      qc.invalidateQueries({ queryKey: ["products"] });
+      qc.invalidateQueries({ queryKey: ["admin", "campaigns"] });
+      qc.invalidateQueries({ queryKey: ["campaigns"] });
     },
   });
 }
 
-// ── Categories ────────────────────────────────────────────────────────────
+// ── Categories (unchanged) ────────────────────────────────────────────────
 
 export function useAdminCategories() {
   return useQuery({
@@ -139,27 +138,27 @@ export function useDeleteCategory() {
   });
 }
 
-// ── Product Requests ──────────────────────────────────────────────────────
+// ── Suggestions ───────────────────────────────────────────────────────────
 
-export function useAdminProductRequests(status = "pending") {
+export function useAdminSuggestions(status = "pending") {
   return useQuery({
-    queryKey: ["admin", "product-requests", status],
-    queryFn: () => getAdminProductRequests(status),
+    queryKey: ["admin", "suggestions", status],
+    queryFn: () => getAdminSuggestions(status),
   });
 }
 
-export function useUpdateProductRequest() {
+export function useUpdateSuggestion() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: ProductRequestUpdatePayload }) =>
-      updateAdminProductRequest(id, payload),
+    mutationFn: ({ id, payload }: { id: string; payload: SuggestionUpdatePayload }) =>
+      updateAdminSuggestion(id, payload),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin", "product-requests"] });
+      qc.invalidateQueries({ queryKey: ["admin", "suggestions"] });
     },
   });
 }
 
-// ── Price Preview ─────────────────────────────────────────────────────────
+// ── Price Preview (unchanged) ─────────────────────────────────────────────
 
 export function useCalculatePrice() {
   return useMutation({

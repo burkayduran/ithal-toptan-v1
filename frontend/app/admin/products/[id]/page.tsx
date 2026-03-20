@@ -3,13 +3,13 @@
 import { use } from "react";
 import { useRouter } from "next/navigation";
 import {
-  useAdminProduct,
-  useUpdateProduct,
-  usePublishProduct,
+  useAdminCampaign,
+  useUpdateCampaign,
+  usePublishCampaign,
   useAdminCategories,
   useCalculatePrice,
 } from "@/features/admin/hooks";
-import type { AdminProduct, AdminCategory } from "@/features/admin/types";
+import type { AdminCampaign, AdminCategory } from "@/features/admin/types";
 import { useState, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,40 +36,40 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-// Inner form — only rendered after product loads, so state initialises from props directly
+// Inner form — only rendered after campaign loads, so state initialises from props directly
 function EditForm({
-  product,
+  campaign,
   categories,
 }: {
-  product: AdminProduct;
+  campaign: AdminCampaign;
   categories: AdminCategory[];
 }) {
   const router = useRouter();
-  const { mutate: update, isPending: isSaving, error } = useUpdateProduct(product.id);
-  const { mutate: publish, isPending: isPublishing } = usePublishProduct();
+  const { mutate: update, isPending: isSaving, error } = useUpdateCampaign(campaign.id);
+  const { mutate: publish, isPending: isPublishing } = usePublishCampaign();
   const { mutate: calcPrice, data: pricePreview, isPending: isCalcPending } = useCalculatePrice();
 
   const [form, setForm] = useState({
-    // Product fields
-    title: product.title,
-    description: product.description ?? "",
-    category_id: product.category_id ?? "",
-    images: (product.images ?? []).join("\n"),
-    status: product.status,
+    // Campaign fields
+    title: campaign.title,
+    description: campaign.description ?? "",
+    category_id: campaign.category_id ?? "",
+    images: (campaign.images ?? []).join("\n"),
+    status: campaign.status,
     // Supplier fields
-    supplier_name: product.supplier_name ?? "",
-    supplier_country: product.supplier_country ?? "CN",
-    alibaba_product_url: product.alibaba_product_url ?? "",
-    lead_time_days: product.lead_time_days?.toString() ?? "",
+    supplier_name: campaign.supplier_name ?? "",
+    supplier_country: campaign.supplier_country ?? "CN",
+    alibaba_product_url: campaign.alibaba_product_url ?? "",
+    lead_time_days: campaign.lead_time_days?.toString() ?? "",
     // Pricing fields (as percentages for display)
-    unit_price_usd: product.unit_price_usd?.toString() ?? "",
-    moq: product.moq?.toString() ?? "",
-    shipping_cost_usd: product.shipping_cost_usd?.toString() ?? "",
-    customs_rate: product.customs_rate != null ? (product.customs_rate * 100).toFixed(0) : "35",
-    margin_rate: product.margin_rate != null ? (product.margin_rate * 100).toFixed(0) : "30",
+    unit_price_usd: campaign.unit_price_usd?.toString() ?? "",
+    moq: campaign.moq?.toString() ?? "",
+    shipping_cost_usd: campaign.shipping_cost_usd?.toString() ?? "",
+    customs_rate: campaign.customs_rate != null ? (campaign.customs_rate * 100).toFixed(0) : "35",
+    margin_rate: campaign.margin_rate != null ? (campaign.margin_rate * 100).toFixed(0) : "30",
   });
 
-  const isLocked = ["moq_reached", "payment_collecting", "ordered"].includes(product.status);
+  const isLocked = ["moq_reached", "payment_collecting", "ordered"].includes(campaign.status);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -108,7 +108,7 @@ function EditForm({
     e.preventDefault();
 
     // B4: Status change confirmations
-    if (form.status !== product.status) {
+    if (form.status !== campaign.status) {
       if (form.status === "cancelled") {
         const confirmed = window.confirm(
           "Bu kampanyayı iptal etmek istediğinize emin misiniz? Bu işlem geri alınamaz."
@@ -116,7 +116,7 @@ function EditForm({
         if (!confirmed) return;
       }
       const STATUS_ORDER = ["draft", "active", "moq_reached", "payment_collecting", "ordered", "delivered"];
-      const oldIdx = STATUS_ORDER.indexOf(product.status);
+      const oldIdx = STATUS_ORDER.indexOf(campaign.status);
       const newIdx = STATUS_ORDER.indexOf(form.status);
       if (
         oldIdx >= STATUS_ORDER.indexOf("ordered") &&
@@ -164,7 +164,7 @@ function EditForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
-      {/* Basic product info */}
+      {/* Basic campaign info */}
       <Section title="Ürün Bilgileri">
         <Field label="Başlık">
           <Input required value={form.title} onChange={set("title")} />
@@ -309,13 +309,13 @@ function EditForm({
         <Button type="submit" disabled={isSaving} className="flex-1">
           {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Kaydet"}
         </Button>
-        {product.status === "draft" && (
+        {campaign.status === "draft" && (
           <Button
             type="button"
             variant="outline"
             disabled={isPublishing}
             onClick={() =>
-              publish(product.id, { onSuccess: () => router.push("/admin/products") })
+              publish(campaign.id, { onSuccess: () => router.push("/admin/products") })
             }
           >
             {isPublishing ? <Loader2 className="h-4 w-4 animate-spin" /> : "Yayınla"}
@@ -328,7 +328,7 @@ function EditForm({
 
 export default function EditProductPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const { data: product, isLoading, isError } = useAdminProduct(id);
+  const { data: campaign, isLoading, isError } = useAdminCampaign(id);
   const { data: categories } = useAdminCategories();
 
   return (
@@ -341,11 +341,11 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
           </Button>
         </Link>
         <h1 className="text-xl font-bold text-gray-900 flex-1 line-clamp-1">
-          {product?.title ?? "Ürün Düzenle"}
+          {campaign?.title ?? "Ürün Düzenle"}
         </h1>
-        {product && (
-          <Badge variant={product.status === "active" ? "default" : "secondary"}>
-            {product.status}
+        {campaign && (
+          <Badge variant={campaign.status === "active" ? "default" : "secondary"}>
+            {campaign.status}
           </Badge>
         )}
       </div>
@@ -354,7 +354,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
         <div className="flex items-center gap-2 text-sm text-gray-500">
           <Loader2 className="h-4 w-4 animate-spin" /> Yükleniyor...
         </div>
-      ) : isError || !product ? (
+      ) : isError || !campaign ? (
         <div>
           <p className="text-sm text-red-500">Ürün bulunamadı.</p>
           <Link href="/admin/products">
@@ -364,7 +364,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
           </Link>
         </div>
       ) : (
-        <EditForm product={product} categories={categories ?? []} />
+        <EditForm campaign={campaign} categories={categories ?? []} />
       )}
     </div>
   );

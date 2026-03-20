@@ -4,7 +4,7 @@ import { use } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useStatusEntry } from "@/features/payments/hooks";
-import type { WishlistStatus } from "@/features/wishlist/types";
+import type { ParticipantStatus } from "@/features/wishlist/types";
 import PageContainer from "@/components/layout/PageContainer";
 import LoadingState from "@/components/common/LoadingState";
 import ErrorState from "@/components/common/ErrorState";
@@ -23,10 +23,10 @@ const PLACEHOLDER_IMG =
 export default function StatusPage({
   params,
 }: {
-  params: Promise<{ entryId: string }>;
+  params: Promise<{ participantId: string }>;
 }) {
-  const { entryId } = use(params);
-  const { data: entry, isLoading, isError, refetch } = useStatusEntry(entryId);
+  const { participantId } = use(params);
+  const { data: entry, isLoading, isError, refetch } = useStatusEntry(participantId);
 
   if (isLoading) return <LoadingState />;
   if (isError || !entry) {
@@ -40,8 +40,8 @@ export default function StatusPage({
     );
   }
 
-  const thumbnail = entry.product_image ?? PLACEHOLDER_IMG;
-  const entryStatus = entry.status as WishlistStatus;
+  const thumbnail = entry.campaign_image ?? PLACEHOLDER_IMG;
+  const entryStatus = entry.status as ParticipantStatus;
 
   return (
     <PageContainer>
@@ -66,7 +66,7 @@ export default function StatusPage({
             <div className="relative w-20 h-20 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100">
               <Image
                 src={thumbnail}
-                alt={entry.product_title}
+                alt={entry.campaign_title}
                 fill
                 className="object-cover"
                 sizes="80px"
@@ -74,7 +74,7 @@ export default function StatusPage({
             </div>
             <ConfirmationHeader
               entryStatus={entryStatus}
-              productTitle={entry.product_title}
+              productTitle={entry.campaign_title}
             />
           </div>
 
@@ -87,7 +87,7 @@ export default function StatusPage({
           )}
 
           {/* Waiting / not paid yet — navigate to payment */}
-          {entryStatus === "notified" && (
+          {entryStatus === "invited" && (
             <>
               <StateNoticeBanner
                 type="warning"
@@ -123,7 +123,7 @@ export default function StatusPage({
               ← Siparişlerime Dön
             </Button>
           </Link>
-          <Link href={`/campaigns/${entry.request_id}`}>
+          <Link href={`/campaigns/${entry.campaign_id}`}>
             <Button variant="ghost" size="sm" className="text-gray-500">
               Kampanyayı Gör
             </Button>

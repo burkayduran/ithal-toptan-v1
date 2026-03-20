@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useAdminProductRequests, useUpdateProductRequest } from "@/features/admin/hooks";
-import type { AdminProductRequest } from "@/features/admin/types";
+import { useAdminSuggestions, useUpdateSuggestion } from "@/features/admin/hooks";
+import type { AdminSuggestion } from "@/features/admin/types";
 import { Button } from "@/components/ui/button";
 import { Loader2, ChevronDown, Plus } from "lucide-react";
 
@@ -23,10 +23,10 @@ function RequestRow({
   isSaving,
   onCreateProduct,
 }: {
-  req: AdminProductRequest;
+  req: AdminSuggestion;
   onSave: (id: string, status: string, notes: string) => void;
   isSaving: boolean;
-  onCreateProduct: (req: AdminProductRequest) => void;
+  onCreateProduct: (req: AdminSuggestion) => void;
 }) {
   const [status, setStatus] = useState(req.status);
   const [notes, setNotes] = useState(req.admin_notes ?? "");
@@ -117,14 +117,14 @@ function RequestRow({
 export default function AdminProductRequestsPage() {
   const router = useRouter();
   const [activeStatus, setActiveStatus] = useState<RequestStatus>("pending");
-  const { data: requests, isLoading, isError, refetch } = useAdminProductRequests(activeStatus);
-  const { mutate: updateRequest, isPending: isSaving } = useUpdateProductRequest();
+  const { data: requests, isLoading, isError, refetch } = useAdminSuggestions(activeStatus);
+  const { mutate: updateRequest, isPending: isSaving } = useUpdateSuggestion();
 
   function handleSave(id: string, status: string, admin_notes: string) {
     updateRequest({ id, payload: { status, admin_notes } });
   }
 
-  function handleCreateProduct(req: AdminProductRequest) {
+  function handleCreateProduct(req: AdminSuggestion) {
     const params = new URLSearchParams();
     if (req.title) params.set("title", req.title);
     if (req.description) params.set("description", req.description);

@@ -1,6 +1,7 @@
-import { ProductStatus } from "@/features/campaigns/types";
+import { CampaignStatus } from "@/features/campaigns/types";
+import { ParticipantStatus } from "@/features/wishlist/types";
 
-export function getStatusLabel(status: ProductStatus): string {
+export function getCampaignStatusLabel(status: CampaignStatus): string {
   switch (status) {
     case "active":
       return "Aktif";
@@ -14,17 +15,35 @@ export function getStatusLabel(status: ProductStatus): string {
       return "Teslim Edildi";
     case "cancelled":
       return "İptal Edildi";
-    case "pending":
-      return "Beklemede";
-    case "sourcing":
-      return "Tedarik Ediliyor";
+    case "draft":
+      return "Taslak";
     default:
       return status;
   }
 }
 
+export function getParticipantStatusLabel(status: ParticipantStatus): string {
+  switch (status) {
+    case "joined":
+      return "Beklemede";
+    case "invited":
+      return "Ödeme Bekliyor";
+    case "paid":
+      return "Ödendi";
+    case "expired":
+      return "Süresi Doldu";
+    case "cancelled":
+      return "İptal";
+    default:
+      return status;
+  }
+}
+
+// Keep backward-compatible aliases
+export const getStatusLabel = getCampaignStatusLabel;
+
 export function getStatusVariant(
-  status: ProductStatus
+  status: CampaignStatus
 ): "default" | "secondary" | "destructive" | "outline" {
   switch (status) {
     case "active":

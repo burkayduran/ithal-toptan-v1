@@ -5,27 +5,27 @@ import { formatCurrency } from "@/lib/utils/formatCurrency";
 import { Loader2, CreditCard, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMarkPaymentAsPaid } from "@/features/payments/hooks";
+import { useConfirmPayment } from "@/features/payments/hooks";
 
 interface PaymentPanelProps {
-  entryId: string;
+  participantId: string;
   totalAmount: number;
   isExpired: boolean;
   isPaid: boolean;
 }
 
 export default function PaymentPanel({
-  entryId,
+  participantId,
   totalAmount,
   isExpired,
   isPaid,
 }: PaymentPanelProps) {
   const router = useRouter();
-  const { mutate: confirmPayment, isPending } = useMarkPaymentAsPaid();
+  const { mutate: confirm, isPending } = useConfirmPayment();
 
   const handlePay = () => {
-    confirmPayment(entryId, {
-      onSuccess: () => router.push(`/status/${entryId}`),
+    confirm(participantId, {
+      onSuccess: () => router.push(`/status/${participantId}`),
     });
   };
 
@@ -39,7 +39,7 @@ export default function PaymentPanel({
         <p className="text-sm text-green-600">
           Ödemeniz onaylandı. Siparişiniz işleme alındı.
         </p>
-        <Link href={`/status/${entryId}`}>
+        <Link href={`/status/${participantId}`}>
           <Button variant="outline" className="w-full border-green-300 text-green-700 hover:bg-green-100">
             Durumu Gör →
           </Button>

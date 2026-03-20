@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useAuthStore } from "@/features/auth/store";
-import { useWishlist } from "@/features/wishlist/hooks";
+import { useMyParticipations } from "@/features/wishlist/hooks";
 import PageContainer from "@/components/layout/PageContainer";
 import SectionHeader from "@/components/common/SectionHeader";
 import EmptyState from "@/components/common/EmptyState";
@@ -11,7 +11,7 @@ import MyCampaignTabs from "@/components/wishlist/MyCampaignTabs";
 
 export default function MyCampaignsPage() {
   const { user, isHydrated, openAuthModal } = useAuthStore();
-  const { data: entries, isLoading } = useWishlist();
+  const { data: participants, isLoading } = useMyParticipations();
 
   useEffect(() => {
     if (isHydrated && !user) {
@@ -33,7 +33,7 @@ export default function MyCampaignsPage() {
           title="Giriş yapmalısınız"
           description="Siparişlerinizi görmek için lütfen giriş yapın."
         />
-      ) : !entries || entries.length === 0 ? (
+      ) : !participants || participants.length === 0 ? (
         <EmptyState
           title="Henüz kampanyaya katılmadınız"
           description="Aktif kampanyalara göz atarak bekleme listesine katılabilirsiniz."
@@ -41,7 +41,7 @@ export default function MyCampaignsPage() {
           actionHref="/"
         />
       ) : (
-        <MyCampaignTabs entries={entries} />
+        <MyCampaignTabs participants={participants} />
       )}
     </PageContainer>
   );

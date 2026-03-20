@@ -1,9 +1,9 @@
-import type { ProductStatus } from "@/features/campaigns/types";
-import type { WishlistStatus } from "@/features/wishlist/types";
+import type { CampaignStatus } from "@/features/campaigns/types";
+import type { ParticipantStatus } from "@/features/wishlist/types";
 import { cn } from "@/lib/utils";
 
-/** Unified status type covering both product lifecycle and wishlist entry states */
-type BadgeStatus = ProductStatus | WishlistStatus;
+/** Unified status type covering both campaign lifecycle and participant states */
+type BadgeStatus = CampaignStatus | ParticipantStatus;
 
 interface StatusBadgeProps {
   status: BadgeStatus;
@@ -16,7 +16,7 @@ interface StatusMeta {
 }
 
 const STATUS_META: Record<string, StatusMeta> = {
-  // Product statuses
+  // Campaign statuses
   active:              { label: "Aktif",               className: "bg-green-100 text-green-800 border-green-200" },
   moq_reached:         { label: "Hedef Doldu",         className: "bg-blue-100 text-blue-800 border-blue-200" },
   payment_collecting:  { label: "Ödeme Toplanıyor",    className: "bg-amber-100 text-amber-800 border-amber-200" },
@@ -25,11 +25,14 @@ const STATUS_META: Record<string, StatusMeta> = {
   cancelled:           { label: "İptal Edildi",        className: "bg-red-100 text-red-700 border-red-200" },
   pending:             { label: "Beklemede",           className: "bg-yellow-100 text-yellow-800 border-yellow-200" },
   sourcing:            { label: "Tedarik Ediliyor",    className: "bg-orange-100 text-orange-800 border-orange-200" },
-  // Wishlist entry statuses
-  waiting:             { label: "Beklemede",           className: "bg-blue-50 text-blue-700 border-blue-200" },
-  notified:            { label: "Ödeme Gerekli",       className: "bg-amber-100 text-amber-800 border-amber-200" },
+  // Participant statuses
+  joined:              { label: "Katıldı",             className: "bg-blue-50 text-blue-700 border-blue-200" },
+  invited:             { label: "Ödeme Gerekli",       className: "bg-amber-100 text-amber-800 border-amber-200" },
   paid:                { label: "Ödendi",              className: "bg-green-100 text-green-800 border-green-200" },
   expired:             { label: "Süresi Doldu",        className: "bg-red-100 text-red-700 border-red-200" },
+  // Backward compat: old status values
+  waiting:             { label: "Beklemede",           className: "bg-blue-50 text-blue-700 border-blue-200" },
+  notified:            { label: "Ödeme Gerekli",       className: "bg-amber-100 text-amber-800 border-amber-200" },
 };
 
 const FALLBACK: StatusMeta = { label: "", className: "bg-gray-100 text-gray-600 border-gray-200" };

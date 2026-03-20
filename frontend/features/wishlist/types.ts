@@ -1,27 +1,21 @@
-import type { PaymentStage } from "@/features/payments/types";
+/** Participant status values (matches backend ParticipantStatus) */
+export type ParticipantStatus = "joined" | "invited" | "paid" | "expired" | "cancelled";
 
-/** Matches backend WishlistEntry status values */
-export type WishlistStatus = "waiting" | "notified" | "paid" | "expired" | "cancelled";
-
-/** Matches backend WishlistResponse – includes denormalized product fields */
-export interface WishlistEntry {
+/** Matches backend ParticipantResponse */
+export interface Participant {
   id: string;
-  /** The product/request ID this entry belongs to */
-  request_id: string;
+  campaign_id: string;
   user_id: string;
   quantity: number;
-  status: WishlistStatus;
+  status: ParticipantStatus;
   joined_at: string;
-  notified_at: string | null;
+  invited_at: string | null;
   payment_deadline: string | null;
-  /** Denormalized from product – may be null if product was deleted */
-  product_title: string | null;
-  product_image: string | null;
+  paid_at: string | null;
+  campaign_title: string | null;
+  campaign_image: string | null;
+  campaign_status: string | null;
   selling_price_try: number | null;
-  /** Total amount due for this entry in TRY (quantity × price) */
-  total_amount?: number | null;
-  /** Current progress toward MOQ (0-100) – computed server-side in get_my_wishlist */
-  moq_fill_percentage?: number | null;
-  /** Lifecycle stage – used on payment and status pages */
-  stage?: PaymentStage | null;
+  total_amount: number | null;
+  moq_fill_percentage: number | null;
 }

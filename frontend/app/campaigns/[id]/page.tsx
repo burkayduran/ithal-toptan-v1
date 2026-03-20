@@ -1,8 +1,8 @@
 "use client";
 
 import { use } from "react";
-import { useProduct, useSimilarProducts } from "@/features/campaigns/hooks";
-import { useWishlist } from "@/features/wishlist/hooks";
+import { useCampaign, useSimilarCampaigns } from "@/features/campaigns/hooks";
+import { useMyParticipations } from "@/features/wishlist/hooks";
 import PageContainer from "@/components/layout/PageContainer";
 import CampaignGallery from "@/components/campaign/CampaignGallery";
 import CampaignHeader from "@/components/campaign/CampaignHeader";
@@ -39,10 +39,10 @@ export default function CampaignDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const { data: product, isLoading, isError, refetch } = useProduct(id);
-  const { data: similarProducts = [] } = useSimilarProducts(id);
-  const { data: wishlist } = useWishlist();
-  const myEntry = wishlist?.find((e) => e.request_id === id) ?? null;
+  const { data: campaign, isLoading, isError, refetch } = useCampaign(id);
+  const { data: similarCampaigns = [] } = useSimilarCampaigns(id);
+  const { data: participations } = useMyParticipations();
+  const myParticipant = participations?.find((p) => p.campaign_id === id) ?? null;
 
   if (isLoading) {
     return (
@@ -74,7 +74,7 @@ export default function CampaignDetailPage({
       </PageContainer>
     );
   }
-  if (isError || !product) {
+  if (isError || !campaign) {
     return (
       <PageContainer>
         <ErrorState
@@ -87,7 +87,7 @@ export default function CampaignDetailPage({
 
   const PLACEHOLDER_IMG =
     "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&q=80";
-  const images = product.images?.length > 0 ? product.images : [PLACEHOLDER_IMG];
+  const images = campaign.images?.length > 0 ? campaign.images : [PLACEHOLDER_IMG];
 
   return (
     <PageContainer>
@@ -102,16 +102,16 @@ export default function CampaignDetailPage({
           Kampanyalar
         </Link>
         <ChevronRight className="h-3.5 w-3.5" />
-        <span className="text-gray-900 font-medium line-clamp-1">{product.title}</span>
+        <span className="text-gray-900 font-medium line-clamp-1">{campaign.title}</span>
       </nav>
 
       {/* Main layout: gallery + details */}
       <div className="grid lg:grid-cols-2 gap-10 lg:gap-16 mb-16">
-        <CampaignGallery images={images} title={product.title} />
+        <CampaignGallery images={images} title={campaign.title} />
 
         <div className="space-y-6">
-          <CampaignHeader product={product} />
-          <JoinPanel product={product} entry={myEntry} />
+          <CampaignHeader campaign={campaign} />
+          <JoinPanel campaign={campaign} participant={myParticipant} />
         </div>
       </div>
 
@@ -150,10 +150,10 @@ export default function CampaignDetailPage({
       </section>
 
       {/* Similar campaigns */}
-      {similarProducts.length > 0 && (
+      {similarCampaigns.length > 0 && (
         <section>
           <SectionHeader title="Benzer Kampanyalar" />
-          <CampaignGrid products={similarProducts} />
+          <CampaignGrid campaigns={similarCampaigns} />
         </section>
       )}
     </PageContainer>

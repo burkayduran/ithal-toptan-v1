@@ -20,10 +20,10 @@ const PLACEHOLDER_IMG =
 export default function PaymentPage({
   params,
 }: {
-  params: Promise<{ entryId: string }>;
+  params: Promise<{ participantId: string }>;
 }) {
-  const { entryId } = use(params);
-  const { data: entry, isLoading, isError, refetch } = usePaymentEntry(entryId);
+  const { participantId } = use(params);
+  const { data: entry, isLoading, isError, refetch } = usePaymentEntry(participantId);
 
   if (isLoading) return <LoadingState />;
   if (isError || !entry) {
@@ -41,7 +41,7 @@ export default function PaymentPage({
     !!entry.payment_deadline && new Date(entry.payment_deadline) < new Date();
   const isExpired = entry.status === "expired" || isDeadlinePassed;
   const isPaid = entry.status === "paid";
-  const thumbnail = entry.product_image ?? PLACEHOLDER_IMG;
+  const thumbnail = entry.campaign_image ?? PLACEHOLDER_IMG;
   const pricePerUnit =
     entry.quantity > 0 ? entry.total_amount / entry.quantity : entry.total_amount;
 
@@ -83,7 +83,7 @@ export default function PaymentPage({
           <div className="relative w-20 h-20 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100">
             <Image
               src={thumbnail}
-              alt={entry.product_title}
+              alt={entry.campaign_title}
               fill
               className="object-cover"
               sizes="80px"
@@ -91,7 +91,7 @@ export default function PaymentPage({
           </div>
           <div>
             <h1 className="font-bold text-gray-900 text-base leading-snug line-clamp-2">
-              {entry.product_title}
+              {entry.campaign_title}
             </h1>
             <p className="text-sm text-gray-500 mt-0.5">{entry.quantity} adet</p>
           </div>
@@ -110,7 +110,7 @@ export default function PaymentPage({
 
         {/* Summary */}
         <PaymentSummaryCard
-          productTitle={entry.product_title}
+          productTitle={entry.campaign_title}
           quantity={entry.quantity}
           pricePerUnit={pricePerUnit}
           totalAmount={entry.total_amount}
@@ -118,7 +118,7 @@ export default function PaymentPage({
 
         {/* Payment CTA */}
         <PaymentPanel
-          entryId={entry.id}
+          participantId={entry.id}
           totalAmount={entry.total_amount}
           isExpired={isExpired}
           isPaid={isPaid}

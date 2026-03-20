@@ -1,15 +1,15 @@
 import { cn } from "@/lib/utils";
 import StatusBadge from "@/components/campaign/StatusBadge";
 import { CheckCircle2, Clock, XCircle } from "lucide-react";
-import type { WishlistStatus } from "@/features/wishlist/types";
+import type { ParticipantStatus } from "@/features/wishlist/types";
 
 interface ConfirmationHeaderProps {
-  entryStatus: WishlistStatus;
+  entryStatus: ParticipantStatus;
   productTitle: string;
 }
 
 const CONFIG: Record<
-  WishlistStatus,
+  ParticipantStatus,
   { icon: React.ElementType; iconColor: string; heading: string; subtext: string }
 > = {
   paid: {
@@ -18,13 +18,13 @@ const CONFIG: Record<
     heading: "Ödemeniz Alındı",
     subtext: "Siparişiniz işleme alındı. Güncellemeler e-posta ile iletilecek.",
   },
-  notified: {
+  invited: {
     icon: Clock,
     iconColor: "text-amber-500",
     heading: "Ödeme Bekleniyor",
     subtext: "Aşağıdaki süre dolmadan ödemenizi tamamlayın.",
   },
-  waiting: {
+  joined: {
     icon: Clock,
     iconColor: "text-blue-500",
     heading: "Bekleme Listesinde",
@@ -45,7 +45,7 @@ const CONFIG: Record<
 };
 
 export default function ConfirmationHeader({ entryStatus, productTitle }: ConfirmationHeaderProps) {
-  const { icon: Icon, iconColor, heading, subtext } = CONFIG[entryStatus] ?? CONFIG.waiting;
+  const { icon: Icon, iconColor, heading, subtext } = CONFIG[entryStatus] ?? CONFIG.joined;
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-3">

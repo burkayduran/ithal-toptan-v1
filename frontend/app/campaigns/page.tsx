@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { useProducts } from "@/features/campaigns/hooks";
+import { useCampaigns } from "@/features/campaigns/hooks";
 import {
-  filterProducts,
-  sortProducts,
+  filterCampaigns,
+  sortCampaigns,
   type StatusFilter,
   type SortOption,
 } from "@/features/campaigns/adapters";
@@ -43,16 +43,16 @@ export default function CampaignsPage() {
     return () => clearTimeout(id);
   }, [searchInput]);
 
-  const { data: products, isLoading, isError, refetch } = useProducts();
+  const { data: campaigns, isLoading, isError, refetch } = useCampaigns();
 
   const results = useMemo(() => {
-    if (!products) return [];
-    const filtered = filterProducts(products, {
+    if (!campaigns) return [];
+    const filtered = filterCampaigns(campaigns, {
       search: debouncedSearch,
       status: statusFilter,
     });
-    return sortProducts(filtered, sortBy);
-  }, [products, debouncedSearch, statusFilter, sortBy]);
+    return sortCampaigns(filtered, sortBy);
+  }, [campaigns, debouncedSearch, statusFilter, sortBy]);
 
   return (
     <PageContainer>
@@ -134,7 +134,7 @@ export default function CampaignsPage() {
           <p className="text-xs text-gray-400 mb-4">
             {results.length} kampanya
           </p>
-          <CampaignGrid products={results} />
+          <CampaignGrid campaigns={results} />
         </>
       )}
     </PageContainer>

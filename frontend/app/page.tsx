@@ -1,6 +1,6 @@
 "use client";
 
-import { useProducts } from "@/features/campaigns/hooks";
+import { useCampaigns } from "@/features/campaigns/hooks";
 import { Button } from "@/components/ui/button";
 import PageContainer from "@/components/layout/PageContainer";
 import SectionHeader from "@/components/common/SectionHeader";
@@ -12,23 +12,23 @@ import EmptyState from "@/components/common/EmptyState";
 import { ArrowRight, Package, ShoppingBag, CreditCard, Zap } from "lucide-react";
 
 export default function HomePage() {
-  const { data: products, isLoading, isError, refetch } = useProducts();
+  const { data: campaigns, isLoading, isError, refetch } = useCampaigns();
 
-  const activeProducts = products?.filter((p) => p.status === "active") ?? [];
-  const moqReachedProducts = products?.filter((p) => p.status === "moq_reached") ?? [];
-  const paymentCollectingProducts = products?.filter((p) => p.status === "payment_collecting") ?? [];
+  const activeCampaigns = campaigns?.filter((p) => p.status === "active") ?? [];
+  const moqReachedCampaigns = campaigns?.filter((p) => p.status === "moq_reached") ?? [];
+  const paymentCollectingCampaigns = campaigns?.filter((p) => p.status === "payment_collecting") ?? [];
 
-  // Near-unlock: active products where >= 60% of MOQ is filled
-  const nearUnlock = activeProducts.filter((p) => (p.moq_fill_percentage ?? 0) >= 60);
+  // Near-unlock: active campaigns where >= 60% of MOQ is filled
+  const nearUnlock = activeCampaigns.filter((p) => (p.moq_fill_percentage ?? 0) >= 60);
 
   // Featured card: priority active → moq_reached → payment_collecting, never internal states
   const featured =
-    activeProducts[0] ??
-    moqReachedProducts[0] ??
-    paymentCollectingProducts[0] ??
+    activeCampaigns[0] ??
+    moqReachedCampaigns[0] ??
+    paymentCollectingCampaigns[0] ??
     null;
 
-  const hasAnyProducts = (products?.length ?? 0) > 0;
+  const hasAnyCampaigns = (campaigns?.length ?? 0) > 0;
 
   return (
     <>
@@ -64,7 +64,7 @@ export default function HomePage() {
             {featured && (
               <div className="hidden lg:flex justify-end">
                 <div className="w-80">
-                  <CampaignCard product={featured} />
+                  <CampaignCard campaign={featured} />
                 </div>
               </div>
             )}
@@ -127,7 +127,7 @@ export default function HomePage() {
             </div>
           ) : isError ? (
             <ErrorState onRetry={() => refetch()} />
-          ) : !hasAnyProducts ? (
+          ) : !hasAnyCampaigns ? (
             <EmptyState
               title="Şu an aktif kampanya bulunmuyor"
               description="Yeni kampanyalar için daha sonra tekrar kontrol edin."
@@ -141,40 +141,40 @@ export default function HomePage() {
                     title="🔥 Hedefe Yakın"
                     subtitle="Bu kampanyalar hızla dolmak üzere – hemen katılın!"
                   />
-                  <CampaignGrid products={nearUnlock} />
+                  <CampaignGrid campaigns={nearUnlock} />
                 </section>
               )}
 
               {/* Active campaigns */}
-              {activeProducts.length > 0 && (
+              {activeCampaigns.length > 0 && (
                 <section>
                   <SectionHeader
                     title="Aktif Kampanyalar"
                     subtitle="Şu an katılabileceğiniz tüm grup alımları."
                   />
-                  <CampaignGrid products={activeProducts} />
+                  <CampaignGrid campaigns={activeCampaigns} />
                 </section>
               )}
 
               {/* MOQ reached – still accepting late joiners */}
-              {moqReachedProducts.length > 0 && (
+              {moqReachedCampaigns.length > 0 && (
                 <section>
                   <SectionHeader
                     title="Hedefe Ulaştı"
                     subtitle="Hedef doldu! Katılırsanız ödeme bildirimi alırsınız."
                   />
-                  <CampaignGrid products={moqReachedProducts} />
+                  <CampaignGrid campaigns={moqReachedCampaigns} />
                 </section>
               )}
 
               {/* Payment collecting – closed to new joiners */}
-              {paymentCollectingProducts.length > 0 && (
+              {paymentCollectingCampaigns.length > 0 && (
                 <section>
                   <SectionHeader
                     title="Ödeme Aşamasında"
                     subtitle="Bu kampanyalar için ödeme toplanıyor."
                   />
-                  <CampaignGrid products={paymentCollectingProducts} />
+                  <CampaignGrid campaigns={paymentCollectingCampaigns} />
                 </section>
               )}
             </div>

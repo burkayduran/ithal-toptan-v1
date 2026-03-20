@@ -6,15 +6,15 @@ export type PaymentStage =
   | "shipping"
   | "delivered";
 
+/** Matches backend PaymentEntryV2Response */
 export interface PaymentEntry {
-  id: string;
-  request_id: string;
-  product_title: string;
-  product_image: string | null;
+  id: string;              // participant_id
+  campaign_id: string;
+  campaign_title: string;
+  campaign_image: string | null;
   quantity: number;
-  /** Total amount due in Turkish Lira */
   total_amount: number;
-  status: "waiting" | "notified" | "paid" | "expired" | "cancelled";
+  status: "joined" | "invited" | "paid" | "expired" | "cancelled";
   payment_deadline: string | null;
   stage: PaymentStage;
   lead_time_days?: number | null;

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCreateProduct, useCalculatePrice, useAdminCategories } from "@/features/admin/hooks";
+import { useCreateCampaign, useCalculatePrice, useAdminCategories } from "@/features/admin/hooks";
 import type { PriceBreakdown } from "@/features/admin/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,7 +41,7 @@ export default function NewProductPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { data: categories } = useAdminCategories();
-  const { mutate: create, isPending, error } = useCreateProduct();
+  const { mutate: create, isPending, error } = useCreateCampaign();
   const { mutate: calcPrice, data: priceData, isPending: isCalcing } = useCalculatePrice();
 
   // Pre-fill from product request query params (D3)

@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Product } from "@/features/campaigns/types";
-import { WishlistEntry } from "@/features/wishlist/types";
+import { Campaign } from "@/features/campaigns/types";
+import { Participant } from "@/features/wishlist/types";
 import { useAuthStore } from "@/features/auth/store";
-import { useJoinWishlist } from "@/features/wishlist/hooks";
+import { useJoinCampaign } from "@/features/wishlist/hooks";
 import { Button } from "@/components/ui/button";
 import ProgressBlock from "./ProgressBlock";
 import CountdownBlock from "./CountdownBlock";
@@ -15,33 +15,33 @@ import WishlistSuccessNotice from "./WishlistSuccessNotice";
 import { Loader2, ShoppingCart, CreditCard, CheckCircle2 } from "lucide-react";
 
 interface JoinPanelProps {
-  product: Product;
-  /** Current user's wishlist entry for this product, if any */
-  entry?: WishlistEntry | null;
+  campaign: Campaign;
+  /** Current user's participant entry for this campaign, if any */
+  participant?: Participant | null;
 }
 
-export default function JoinPanel({ product, entry }: JoinPanelProps) {
+export default function JoinPanel({ campaign, participant }: JoinPanelProps) {
   const [quantity, setQuantity] = useState(1);
   const [justJoined, setJustJoined] = useState(false);
   const { user, openAuthModal } = useAuthStore();
-  const { mutate: joinWishlist, isPending, error } = useJoinWishlist();
+  const { mutate: joinCampaign, isPending, error } = useJoinCampaign();
 
   const canShowProgress =
-    product.moq != null && product.current_wishlist_count != null;
+    campaign.moq != null && campaign.current_participant_count != null;
 
   // ── If user just joined in this session ──────────────────────────────────
   if (justJoined) {
-    return <WishlistSuccessNotice quantity={quantity} campaignTitle={product.title} />;
+    return <WishlistSuccessNotice quantity={quantity} campaignTitle={campaign.title} />;
   }
 
-  // ── Already has a notified entry → show payment CTA ──────────────────────
-  if (entry?.status === "notified") {
+  // ── Already has an invited entry → show payment CTA ──────────────────────
+  if (participant?.status === "invited") {
     return (
       <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 space-y-4">
         {canShowProgress && (
           <ProgressBlock
-            currentCount={product.current_wishlist_count!}
-            targetCount={product.moq!}
+            currentCount={campaign.current_participant_count!}
+            targetCount={campaign.moq!}
           />
         )}
         <StateNoticeBanner
@@ -49,13 +49,13 @@ export default function JoinPanel({ product, entry }: JoinPanelProps) {
           title="Ödeme bildirimi aldınız"
           message="Hedef sayıya ulaşıldı. Yerinizi onaylamak için ödemeyi tamamlayın."
         />
-        {entry.payment_deadline && (
+        {participant.payment_deadline && (
           <div className="space-y-1">
             <p className="text-xs text-gray-500 font-medium">Kalan süre</p>
-            <CountdownBlock deadline={entry.payment_deadline} />
+            <CountdownBlock deadline={participant.payment_deadline} />
           </div>
         )}
-        <Link href={`/payment/${entry.id}`}>
+        <Link href={`/payment/${participant.id}`}>
           <Button className="w-full gap-2 bg-amber-600 hover:bg-amber-700" size="lg">
             <CreditCard className="h-4 w-4" />
             Ödemeyi Tamamla
@@ -66,7 +66,7 @@ export default function JoinPanel({ product, entry }: JoinPanelProps) {
   }
 
   // ── Already paid → show confirmation ─────────────────────────────────────
-  if (entry?.status === "paid") {
+  if (participant?.status === "paid") {
     return (
       <div className="rounded-xl border border-green-200 bg-green-50 p-5 space-y-3">
         <div className="flex items-center gap-2 text-green-700">
@@ -76,7 +76,7 @@ export default function JoinPanel({ product, entry }: JoinPanelProps) {
         <p className="text-sm text-green-600">
           Siparişiniz işleme alındı. Kargo güncellemelerini durum sayfasından takip edebilirsiniz.
         </p>
-        <Link href={`/status/${entry.id}`}>
+        <Link href={`/status/${participant.id}`}>
           <Button variant="outline" className="w-full border-green-300 text-green-700 hover:bg-green-100">
             Siparişimi Takip Et →
           </Button>
@@ -86,7 +86,7 @@ export default function JoinPanel({ product, entry }: JoinPanelProps) {
   }
 
   // ── Entry expired → show recovery message ────────────────────────────────
-  if (entry?.status === "expired") {
+  if (participant?.status === "expired") {
     return (
       <div className="rounded-xl border border-red-200 bg-red-50 p-5 space-y-3">
         <StateNoticeBanner
@@ -94,7 +94,7 @@ export default function JoinPanel({ product, entry }: JoinPanelProps) {
           title="Ödeme süreniz doldu"
           message="Bu tur için ödeme pencereniz kapandı. Kampanya sıfırlanırsa yeniden katılabilirsiniz."
         />
-        <Link href={`/campaigns/${product.id}`}>
+        <Link href={`/campaigns/${campaign.id}`}>
           <Button variant="outline" className="w-full border-red-300 text-red-600 hover:bg-red-100">
             Kampanyayı İzle
           </Button>
@@ -104,16 +104,16 @@ export default function JoinPanel({ product, entry }: JoinPanelProps) {
   }
 
   // ── Backend accepts joins for active + moq_reached ────────────────────────
-  const canJoin = product.status === "active" || product.status === "moq_reached";
+  const canJoin = campaign.status === "active" || campaign.status === "moq_reached";
 
-  // ── Already in queue (waiting) while campaign still active ───────────────
-  if (entry?.status === "waiting" && canJoin) {
+  // ── Already in queue (joined) while campaign still active ───────────────
+  if (participant?.status === "joined" && canJoin) {
     return (
       <div className="rounded-xl border border-blue-200 bg-blue-50 p-5 space-y-4">
         {canShowProgress && (
           <ProgressBlock
-            currentCount={product.current_wishlist_count!}
-            targetCount={product.moq!}
+            currentCount={campaign.current_participant_count!}
+            targetCount={campaign.moq!}
           />
         )}
         <StateNoticeBanner
@@ -129,19 +129,19 @@ export default function JoinPanel({ product, entry }: JoinPanelProps) {
     );
   }
 
-  // ── Join UI (no entry yet, or entry is cancelled) ─────────────────────────
+  // ── Join UI (no participant yet, or participant is cancelled) ─────────────
   const handleJoin = () => {
     if (!user) {
       openAuthModal(() => {
-        joinWishlist(
-          { request_id: product.id, quantity },
+        joinCampaign(
+          { campaignId: campaign.id, quantity },
           { onSuccess: () => setJustJoined(true) }
         );
       });
       return;
     }
-    joinWishlist(
-      { request_id: product.id, quantity },
+    joinCampaign(
+      { campaignId: campaign.id, quantity },
       { onSuccess: () => setJustJoined(true) }
     );
   };
@@ -150,14 +150,14 @@ export default function JoinPanel({ product, entry }: JoinPanelProps) {
     <div className="rounded-xl border border-gray-200 bg-white p-5 space-y-5">
       {canShowProgress && (
         <ProgressBlock
-          currentCount={product.current_wishlist_count!}
-          targetCount={product.moq!}
+          currentCount={campaign.current_participant_count!}
+          targetCount={campaign.moq!}
         />
       )}
 
       {canJoin ? (
         <>
-          {product.status === "moq_reached" && (
+          {campaign.status === "moq_reached" && (
             <StateNoticeBanner
               type="info"
               title="Hedef doldu!"
@@ -186,33 +186,33 @@ export default function JoinPanel({ product, entry }: JoinPanelProps) {
             )}
             {isPending
               ? "Kaydediliyor..."
-              : product.status === "moq_reached"
+              : campaign.status === "moq_reached"
               ? "Ödeme Listesine Katıl"
               : "Bekleme Listesine Katıl"}
           </Button>
 
           <p className="text-xs text-gray-400 text-center">
-            {product.status === "moq_reached"
+            {campaign.status === "moq_reached"
               ? "Ödeme bildirimi almak için katılın."
               : "Ödeme yalnızca MOQ dolduğunda talep edilir."}
           </p>
         </>
-      ) : product.status === "payment_collecting" ? (
+      ) : campaign.status === "payment_collecting" ? (
         <StateNoticeBanner
           type="warning"
           title="Ödeme toplanıyor"
           message="Bu kampanya için ödeme süreci başlamıştır. Yeni katılım alınmıyor."
         />
-      ) : product.status === "ordered" ? (
+      ) : campaign.status === "ordered" ? (
         <div className="text-center py-4 space-y-1">
           <p className="font-semibold text-purple-700">Sipariş verildi</p>
           <p className="text-sm text-gray-500">Ürün tedarik aşamasında.</p>
         </div>
-      ) : product.status === "delivered" ? (
+      ) : campaign.status === "delivered" ? (
         <div className="text-center py-4">
           <p className="font-semibold text-gray-700">Teslim edildi</p>
         </div>
-      ) : product.status === "cancelled" ? (
+      ) : campaign.status === "cancelled" ? (
         <div className="text-center py-4">
           <p className="font-semibold text-red-600">Kampanya iptal edildi</p>
         </div>

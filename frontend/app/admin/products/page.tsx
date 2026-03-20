@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useAdminProducts, usePublishProduct, useBulkPublish, useBulkCancel } from "@/features/admin/hooks";
+import { useAdminCampaigns, usePublishCampaign, useBulkPublishCampaigns, useBulkCancelCampaigns } from "@/features/admin/hooks";
 import { formatCurrency } from "@/lib/utils/formatCurrency";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,15 +20,15 @@ const STATUS_LABEL: Record<string, { label: string; variant: "default" | "second
 };
 
 export default function AdminProductsPage() {
-  const { data: products, isLoading, isError, refetch } = useAdminProducts();
-  const { mutate: publish, isPending: isPublishing, variables: publishingId } = usePublishProduct();
-  const { mutate: bulkPublish, isPending: isBulkPublishing } = useBulkPublish();
-  const { mutate: bulkCancel, isPending: isBulkCancelling } = useBulkCancel();
+  const { data: campaigns, isLoading, isError, refetch } = useAdminCampaigns();
+  const { mutate: publish, isPending: isPublishing, variables: publishingId } = usePublishCampaign();
+  const { mutate: bulkPublish, isPending: isBulkPublishing } = useBulkPublishCampaigns();
+  const { mutate: bulkCancel, isPending: isBulkCancelling } = useBulkCancelCampaigns();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
-  const filtered = (products ?? []).filter((p) => {
+  const filtered = (campaigns ?? []).filter((p) => {
     const matchesSearch = p.title.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === "all" || p.status === statusFilter;
     return matchesSearch && matchesStatus;

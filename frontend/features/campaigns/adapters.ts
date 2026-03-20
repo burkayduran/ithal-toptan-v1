@@ -1,4 +1,4 @@
-import { Product } from "./types";
+import { Campaign } from "./types";
 
 export type StatusFilter =
   | "all"
@@ -9,48 +9,41 @@ export type StatusFilter =
 
 export type SortOption = "near_unlock" | "newest" | "lowest_price";
 
-/**
- * Filter products by search text and status tab.
- * Only shows discoverable states: active, moq_reached, payment_collecting.
- * Excludes pending/sourcing/ordered/delivered/cancelled — internal or post-purchase states.
- */
-export function filterProducts(
-  products: Product[],
+export function filterCampaigns(
+  campaigns: Campaign[],
   { search, status }: { search: string; status: StatusFilter }
-): Product[] {
-  // Discovery-facing statuses only — ordered/delivered/cancelled are not shown in listing
-  let result = products.filter((p) =>
-    ["active", "moq_reached", "payment_collecting"].includes(p.status)
+): Campaign[] {
+  let result = campaigns.filter((c) =>
+    ["active", "moq_reached", "payment_collecting"].includes(c.status)
   );
 
   if (search.trim()) {
     const q = search.trim().toLowerCase();
     result = result.filter(
-      (p) =>
-        p.title.toLowerCase().includes(q) ||
-        p.description?.toLowerCase().includes(q)
+      (c) =>
+        c.title.toLowerCase().includes(q) ||
+        c.description?.toLowerCase().includes(q)
     );
   }
 
   switch (status) {
     case "active":
-      return result.filter((p) => p.status === "active");
+      return result.filter((c) => c.status === "active");
     case "near_unlock":
       return result.filter(
-        (p) => p.status === "active" && (p.moq_fill_percentage ?? 0) >= 60
+        (c) => c.status === "active" && (c.moq_fill_percentage ?? 0) >= 60
       );
     case "moq_reached":
-      return result.filter((p) => p.status === "moq_reached");
+      return result.filter((c) => c.status === "moq_reached");
     case "payment_collecting":
-      return result.filter((p) => p.status === "payment_collecting");
+      return result.filter((c) => c.status === "payment_collecting");
     default:
       return result;
   }
 }
 
-/** Sort a product list in-place (returns new array). */
-export function sortProducts(products: Product[], sort: SortOption): Product[] {
-  const copy = [...products];
+export function sortCampaigns(campaigns: Campaign[], sort: SortOption): Campaign[] {
+  const copy = [...campaigns];
   switch (sort) {
     case "near_unlock":
       return copy.sort(

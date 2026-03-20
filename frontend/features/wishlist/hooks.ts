@@ -1,80 +1,74 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { addToWishlist, getMyWishlist, removeFromWishlist } from "./api";
+import { getMyParticipations, joinCampaign, leaveCampaign } from "./api";
 import { useAuthStore } from "@/features/auth/store";
-import { WishlistEntry } from "./types";
+import { Participant } from "./types";
 
-export function useWishlist() {
+export function useMyParticipations() {
   const { token, isHydrated, user } = useAuthStore();
   return useQuery({
-    queryKey: ["wishlist", user?.id ?? null],
-    queryFn: getMyWishlist,
+    queryKey: ["my-participations", user?.id ?? null],
+    queryFn: getMyParticipations,
     enabled: isHydrated && !!token,
   });
 }
 
-export function useJoinWishlist() {
+export function useJoinCampaign() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({
-      request_id,
+      campaignId,
       quantity,
     }: {
-      request_id: string;
+      campaignId: string;
       quantity: number;
-    }) => addToWishlist(request_id, quantity),
-    onMutate: async (variables) => {
-      // Cancel outgoing queries so they don't overwrite optimistic update
-      await queryClient.cancelQueries({ queryKey: ["wishlist"] });
-      await queryClient.cancelQueries({ queryKey: ["products"] });
+    }) => joinCampaign(campaignId, quantity),
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: ["my-participations"] });
+      await queryClient.cancelQueries({ queryKey: ["campaigns"] });
 
-      // Snapshot current wishlist for rollback
-      const previousWishlist = queryClient.getQueryData<WishlistEntry[]>(["wishlist"]);
-
-      return { previousWishlist };
+      const previous = queryClient.getQueryData<Participant[]>(["my-participations"]);
+      return { previous };
     },
     onError: (_err, _variables, context) => {
-      // Rollback on error
-      if (context?.previousWishlist) {
-        queryClient.setQueryData(["wishlist"], context.previousWishlist);
+      if (context?.previous) {
+        queryClient.setQueryData(["my-participations"], context.previous);
       }
     },
     onSettled: (_data, _error, variables) => {
-      // Always refetch after mutation
-      queryClient.invalidateQueries({ queryKey: ["wishlist"] });
-      queryClient.invalidateQueries({ queryKey: ["product", variables.request_id] });
-      queryClient.invalidateQueries({ queryKey: ["products"] });
+      queryClient.invalidateQueries({ queryKey: ["my-participations"] });
+      queryClient.invalidateQueries({ queryKey: ["campaign", variables.campaignId] });
+      queryClient.invalidateQueries({ queryKey: ["campaigns"] });
     },
   });
 }
 
-export function useRemoveFromWishlist() {
+export function useLeaveCampaign() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (request_id: string) => removeFromWishlist(request_id),
-    onMutate: async (request_id) => {
-      await queryClient.cancelQueries({ queryKey: ["wishlist"] });
+    mutationFn: (campaignId: string) => leaveCampaign(campaignId),
+    onMutate: async (campaignId) => {
+      await queryClient.cancelQueries({ queryKey: ["my-participations"] });
 
-      const previousWishlist = queryClient.getQueryData<WishlistEntry[]>(["wishlist"]);
+      const previous = queryClient.getQueryData<Participant[]>(["my-participations"]);
 
-      // Optimistically remove the entry
-      if (previousWishlist) {
+      if (previous) {
         queryClient.setQueryData(
-          ["wishlist"],
-          previousWishlist.filter((e) => e.request_id !== request_id)
+          ["my-participations"],
+          previous.filter((p) => p.campaign_id !== campaignId)
         );
       }
 
-      return { previousWishlist };
+      return { previous };
     },
-    onError: (_err, _request_id, context) => {
-      if (context?.previousWishlist) {
-        queryClient.setQueryData(["wishlist"], context.previousWishlist);
+    onError: (_err, _campaignId, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(["my-participations"], context.previous);
       }
     },
-    onSettled: (_data, _error, request_id) => {
-      queryClient.invalidateQueries({ queryKey: ["wishlist"] });
-      queryClient.invalidateQueries({ queryKey: ["product", request_id] });
-      queryClient.invalidateQueries({ queryKey: ["products"] });
+    onSettled: (_data, _error, campaignId) => {
+      queryClient.invalidateQueries({ queryKey: ["my-participations"] });
+      queryClient.invalidateQueries({ queryKey: ["campaign", campaignId] });
+      queryClient.invalidateQueries({ queryKey: ["campaigns"] });
     },
   });
 }

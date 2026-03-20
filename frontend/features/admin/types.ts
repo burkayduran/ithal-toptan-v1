@@ -1,6 +1,7 @@
-// Matches backend AdminProductDetailResponse — includes supplier/offer fields
-export interface AdminProduct {
+// Matches backend AdminCampaignDetailResponse — includes snapshot/offer fields
+export interface AdminCampaign {
   id: string;
+  product_id: string;
   title: string;
   description: string | null;
   category_id: string | null;
@@ -12,19 +13,24 @@ export interface AdminProduct {
   moq: number | null;
   selling_price_try: number | null;
   lead_time_days: number | null;
-  current_wishlist_count: number | null;
+  current_participant_count: number | null;
   moq_fill_percentage: number | null;
-  // Supplier / offer fields (from AdminProductDetailResponse)
-  supplier_name: string | null;
-  supplier_country: string | null;
-  alibaba_product_url: string | null;
-  unit_price_usd: number | null;
-  shipping_cost_usd: number | null;
-  customs_rate: number | null;
-  margin_rate: number | null;
+  // Snapshot fields (from AdminCampaignDetailResponse)
+  selected_offer_id: string | null;
+  supplier_name_snapshot: string | null;
+  supplier_country_snapshot: string | null;
+  unit_price_usd_snapshot: number | null;
+  shipping_cost_usd_snapshot: number | null;
+  customs_rate_snapshot: number | null;
+  margin_rate_snapshot: number | null;
+  fx_rate_snapshot: number | null;
+  moq_reached_at: string | null;
+  payment_deadline: string | null;
+  ordered_at: string | null;
+  delivered_at: string | null;
 }
 
-export interface ProductCreatePayload {
+export interface CampaignCreatePayload {
   title: string;
   description?: string;
   category_id?: string;
@@ -40,12 +46,11 @@ export interface ProductCreatePayload {
   margin_rate: number;
 }
 
-export interface ProductUpdatePayload {
+export interface CampaignUpdatePayload {
   title?: string;
   description?: string;
   category_id?: string | null;
   images?: string[];
-  status?: string;
   // Supplier / offer fields
   unit_price_usd?: number;
   moq?: number;
@@ -90,8 +95,8 @@ export interface CategoryUpdatePayload {
   sort_order?: number;
 }
 
-// Matches backend ProductRequestResponse
-export interface AdminProductRequest {
+// Matches backend SuggestionResponse
+export interface AdminSuggestion {
   id: string;
   title: string;
   description: string | null;
@@ -102,9 +107,10 @@ export interface AdminProductRequest {
   created_by: string | null;
   admin_notes: string | null;
   created_at: string;
+  reviewed_at: string | null;
 }
 
-export interface ProductRequestUpdatePayload {
+export interface SuggestionUpdatePayload {
   status?: string;
   admin_notes?: string;
 }

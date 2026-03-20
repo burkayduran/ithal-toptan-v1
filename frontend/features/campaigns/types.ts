@@ -7,10 +7,9 @@ export interface PaginatedResponse<T> {
   total_pages: number;
 }
 
-/** Matches backend ProductRequest status values */
-export type ProductStatus =
-  | "pending"
-  | "sourcing"
+/** Campaign status values (matches backend CampaignStatus) */
+export type CampaignStatus =
+  | "draft"
   | "active"
   | "moq_reached"
   | "payment_collecting"
@@ -18,25 +17,26 @@ export type ProductStatus =
   | "delivered"
   | "cancelled";
 
-/** Matches backend ProductResponse */
-export interface Product {
+/** Matches backend CampaignResponse */
+export interface Campaign {
   id: string;
+  product_id: string;
   title: string;
   description: string | null;
   category_id: string | null;
   images: string[];
-  status: ProductStatus;
+  status: CampaignStatus;
   view_count: number;
   created_at: string;
   activated_at: string | null;
-  /** Minimum order quantity required to unlock the group buy */
-  moq: number | null;
-  /** Group buy price in Turkish Lira */
+  /** Snapshot selling price in TRY */
   selling_price_try: number | null;
+  /** Minimum order quantity */
+  moq: number | null;
   /** Estimated delivery lead time in days */
   lead_time_days: number | null;
-  /** Total wishlist quantity currently committed */
-  current_wishlist_count: number | null;
+  /** Total participant quantity currently committed */
+  current_participant_count: number | null;
   /** Percentage of MOQ filled (0-100) */
   moq_fill_percentage: number | null;
 }

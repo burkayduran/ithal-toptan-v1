@@ -1,57 +1,60 @@
 import { api } from "@/lib/api/client";
 import type {
-  AdminProduct,
+  AdminCampaign,
   AdminCategory,
-  AdminProductRequest,
+  AdminSuggestion,
   PriceBreakdown,
-  ProductCreatePayload,
-  ProductUpdatePayload,
+  CampaignCreatePayload,
+  CampaignUpdatePayload,
   CategoryCreatePayload,
   CategoryUpdatePayload,
-  ProductRequestUpdatePayload,
+  SuggestionUpdatePayload,
   PricePreviewPayload,
 } from "./types";
 
 const ADMIN = "/api/admin";
+const ADMIN_V2 = "/api/v2/admin";
 
-// ── Products ──────────────────────────────────────────────────────────────
+// ── Campaigns (V2) ───────────────────────────────────────────────────────
 
-export function getAdminProducts(): Promise<AdminProduct[]> {
-  return api.get(`${ADMIN}/products`);
+export function getAdminCampaigns(): Promise<AdminCampaign[]> {
+  return api.get(`${ADMIN_V2}/campaigns`);
 }
 
-export function getAdminProduct(id: string): Promise<AdminProduct> {
-  return api.get(`${ADMIN}/products/${id}`);
+export function getAdminCampaign(id: string): Promise<AdminCampaign> {
+  return api.get(`${ADMIN_V2}/campaigns/${id}`);
 }
 
-export function createAdminProduct(payload: ProductCreatePayload): Promise<AdminProduct> {
-  return api.post(`${ADMIN}/products`, payload);
+export function createAdminCampaign(payload: CampaignCreatePayload): Promise<AdminCampaign> {
+  return api.post(`${ADMIN_V2}/campaigns`, payload);
 }
 
-export function updateAdminProduct(
-  id: string,
-  payload: ProductUpdatePayload
-): Promise<AdminProduct> {
-  return api.patch(`${ADMIN}/products/${id}`, payload);
+export function publishAdminCampaign(id: string): Promise<{ message: string; id: string }> {
+  return api.post(`${ADMIN_V2}/campaigns/${id}/publish`);
 }
 
-export function publishAdminProduct(id: string): Promise<{ message: string; id: string }> {
-  return api.post(`${ADMIN}/products/${id}/publish`);
-}
-
-export function bulkPublishProducts(
+// Bulk operations still go through V1 admin (not yet in V2)
+export function bulkPublishCampaigns(
   product_ids: string[]
 ): Promise<{ published: string[]; failed: { id: string; reason: string }[] }> {
   return api.post(`${ADMIN}/products/bulk-publish`, product_ids);
 }
 
-export function bulkCancelProducts(
+export function bulkCancelCampaigns(
   product_ids: string[]
 ): Promise<{ cancelled: string[]; failed: { id: string; reason: string }[] }> {
   return api.post(`${ADMIN}/products/bulk-cancel`, product_ids);
 }
 
-// ── Categories ────────────────────────────────────────────────────────────
+// Update still goes through V1 admin (not yet in V2)
+export function updateAdminCampaign(
+  id: string,
+  payload: CampaignUpdatePayload
+): Promise<AdminCampaign> {
+  return api.patch(`${ADMIN}/products/${id}`, payload);
+}
+
+// ── Categories (unchanged — shared table) ─────────────────────────────────
 
 export function getAdminCategories(): Promise<AdminCategory[]> {
   return api.get(`${ADMIN}/categories`);
@@ -72,24 +75,23 @@ export function deleteAdminCategory(id: string): Promise<void> {
   return api.delete(`${ADMIN}/categories/${id}`);
 }
 
-// ── Product Requests ──────────────────────────────────────────────────────
+// ── Suggestions (V2) ─────────────────────────────────────────────────────
 
-export function getAdminProductRequests(
+export function getAdminSuggestions(
   status = "pending"
-): Promise<AdminProductRequest[]> {
-  return api.get(`${ADMIN}/product-requests?status=${encodeURIComponent(status)}`);
+): Promise<AdminSuggestion[]> {
+  return api.get(`${ADMIN_V2}/suggestions?status=${encodeURIComponent(status)}`);
 }
 
-export function updateAdminProductRequest(
+export function updateAdminSuggestion(
   id: string,
-  payload: ProductRequestUpdatePayload
-): Promise<AdminProductRequest> {
-  return api.patch(`${ADMIN}/product-requests/${id}`, payload);
+  payload: SuggestionUpdatePayload
+): Promise<AdminSuggestion> {
+  return api.patch(`${ADMIN_V2}/suggestions/${id}`, payload);
 }
 
-// ── Price Preview ─────────────────────────────────────────────────────────
+// ── Price Preview (unchanged — shared endpoint) ──────────────────────────
 
-/** Calculate selling price preview. */
 export function calculatePricePreview(payload: PricePreviewPayload): Promise<PriceBreakdown> {
   return api.post(`${ADMIN}/calculate-price`, {
     unit_price_usd: payload.unit_price_usd,
