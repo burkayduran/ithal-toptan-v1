@@ -105,10 +105,30 @@ async def create_campaign(
         margin_rate=data.margin_rate,
     )
 
-    # 3. Create SupplierOffer
-    placeholder_request_id = uuid_mod.uuid4()
+    # 3. Create Campaign (without selected_offer_id yet)
+    campaign = Campaign(
+        product_id=product.id,
+        status="draft",
+        supplier_name_snapshot=data.supplier_name,
+        supplier_country_snapshot=data.supplier_country,
+        alibaba_product_url_snapshot=data.alibaba_product_url,
+        unit_price_usd_snapshot=data.unit_price_usd,
+        shipping_cost_usd_snapshot=data.shipping_cost_usd,
+        customs_rate_snapshot=data.customs_rate,
+        margin_rate_snapshot=data.margin_rate,
+        fx_rate_snapshot=float(price_breakdown.usd_rate),
+        selling_price_try_snapshot=float(price_breakdown.selling_price_try),
+        moq=data.moq,
+        lead_time_days=data.lead_time_days,
+        created_by=admin.id,
+    )
+    db.add(campaign)
+    await db.flush()  # campaign.id now available
+
+    # 4. Create SupplierOffer with real campaign_id
     offer = SupplierOffer(
-        request_id=placeholder_request_id,
+        campaign_id=campaign.id,
+        request_id=None,
         supplier_name=data.supplier_name,
         supplier_country=data.supplier_country,
         alibaba_product_url=data.alibaba_product_url,
@@ -125,25 +145,19 @@ async def create_campaign(
     db.add(offer)
     await db.flush()
 
-    # 4. Create Campaign with snapshots
-    campaign = Campaign(
-        product_id=product.id,
-        selected_offer_id=offer.id,
-        status="draft",
-        supplier_name_snapshot=data.supplier_name,
-        supplier_country_snapshot=data.supplier_country,
-        alibaba_product_url_snapshot=data.alibaba_product_url,
-        unit_price_usd_snapshot=data.unit_price_usd,
-        shipping_cost_usd_snapshot=data.shipping_cost_usd,
-        customs_rate_snapshot=data.customs_rate,
-        margin_rate_snapshot=data.margin_rate,
-        fx_rate_snapshot=float(price_breakdown.usd_rate),
-        selling_price_try_snapshot=float(price_breakdown.selling_price_try),
-        moq=data.moq,
-        lead_time_days=data.lead_time_days,
-        created_by=admin.id,
-    )
-    db.add(campaign)
+    # 5. Link offer to campaign
+    campaign.selected_offer_id = offer.id
+
+    # Suggestion dönüşüm bağı
+    if data.from_suggestion_id:
+        suggestion_result = await db.execute(
+            select(ProductSuggestion).where(ProductSuggestion.id == data.from_suggestion_id)
+        )
+        suggestion = suggestion_result.scalar_one_or_none()
+        if suggestion:
+            suggestion.converted_product_id = product.id
+            suggestion.status = "approved"
+            suggestion.reviewed_at = datetime.now(timezone.utc)
 
     await db.commit()
     await db.refresh(campaign)
@@ -349,6 +363,44 @@ async def update_campaign(
         product.category_id = data.category_id
     if data.images is not None:
         product.images = data.images
+
+    # ── Status değişikliği ──────────────────────────────────────────────
+    if data.status is not None and data.status != campaign.status:
+        old_status = campaign.status
+        new_status = data.status
+
+        # İş kuralları: hangi geçişler yasak?
+        FORBIDDEN_REVERSE = {
+            ("ordered", "active"), ("ordered", "draft"),
+            ("delivered", "active"), ("delivered", "draft"), ("delivered", "ordered"),
+        }
+        if (old_status, new_status) in FORBIDDEN_REVERSE:
+            raise HTTPException(
+                status_code=400,
+                detail=f"'{old_status}' → '{new_status}' geçişi yapılamaz.",
+            )
+
+        campaign.status = new_status
+
+        # Timestamp'leri güncelle
+        now_ts = datetime.now(timezone.utc)
+        if new_status == "cancelled":
+            campaign.cancelled_at = now_ts
+        elif new_status == "active" and old_status == "draft":
+            campaign.activated_at = now_ts
+        elif new_status == "ordered":
+            campaign.ordered_at = now_ts
+        elif new_status == "delivered":
+            campaign.delivered_at = now_ts
+
+        # Status history kaydı
+        db.add(CampaignStatusHistory(
+            campaign_id=campaign.id,
+            old_status=old_status,
+            new_status=new_status,
+            changed_by=admin.id,
+            reason="admin_manual_update",
+        ))
 
     # Update supplier/pricing snapshot fields
     if data.supplier_name is not None:

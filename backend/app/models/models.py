@@ -88,7 +88,6 @@ class ProductRequest(Base):
     # Relationships
     category: Mapped[Optional["Category"]] = relationship(back_populates="products")
     wishlist_entries: Mapped[List["WishlistEntry"]] = relationship(back_populates="product", cascade="all, delete-orphan")
-    supplier_offers: Mapped[List["SupplierOffer"]] = relationship(back_populates="product", cascade="all, delete-orphan")
 
     __table_args__ = (
         Index("idx_product_status_created", "status", "created_at"),
@@ -101,31 +100,31 @@ class SupplierOffer(Base):
     __tablename__ = "supplier_offers"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    request_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("legacy_product_requests.id"), nullable=False)
-    
+    # Legacy FK — nullable, yeni kayıtlarda kullanılmayacak
+    request_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    # Yeni FK — campaign bağlantısı
+    campaign_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("campaigns.id"), nullable=True)
+
     supplier_name: Mapped[Optional[str]] = mapped_column(String(255))
     supplier_country: Mapped[str] = mapped_column(String(10), default="CN")
     alibaba_product_url: Mapped[Optional[str]] = mapped_column(Text)
-    
+
     # Pricing
     unit_price_usd: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     moq: Mapped[int] = mapped_column(Integer, nullable=False)
     lead_time_days: Mapped[Optional[int]] = mapped_column(Integer)
     shipping_cost_usd: Mapped[Optional[float]] = mapped_column(Numeric(10, 2))
     customs_rate: Mapped[Optional[float]] = mapped_column(Numeric(5, 2))
-    
+
     # Calculated
     usd_rate_used: Mapped[Optional[float]] = mapped_column(Numeric(10, 4))
     selling_price_try: Mapped[Optional[float]] = mapped_column(Numeric(10, 2))
     margin_rate: Mapped[float] = mapped_column(Numeric(5, 2), default=0.25)
-    
+
     is_selected: Mapped[bool] = mapped_column(Boolean, default=False)
     notes: Mapped[Optional[str]] = mapped_column(Text)
-    
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    # Relationships
-    product: Mapped["ProductRequest"] = relationship(back_populates="supplier_offers")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 # ─── WishlistEntry ────────────────────────────────────────────────────────────
@@ -215,6 +214,7 @@ class Notification(Base):
     __tablename__ = "notifications"
     __table_args__ = (
         UniqueConstraint("user_id", "request_id", "type", name="uq_notification_user_request_type"),
+        UniqueConstraint("user_id", "campaign_id", "type", name="uq_notification_user_campaign_type"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

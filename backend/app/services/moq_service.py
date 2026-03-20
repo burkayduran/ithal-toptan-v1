@@ -175,7 +175,7 @@ return val
 
         existing_notif_result = await self.db.execute(
             select(Notification.user_id).where(
-                Notification.request_id == campaign.legacy_request_id,
+                Notification.campaign_id == campaign_id,
                 Notification.type == "moq_reached",
                 Notification.channel == "email",
                 Notification.status.in_(["pending", "sent", "delivered", "opened", "clicked"]),
@@ -189,6 +189,7 @@ return val
             self.db.add(
                 Notification(
                     user_id=participant.user_id,
+                    campaign_id=campaign_id,
                     request_id=campaign.legacy_request_id,
                     type="moq_reached",
                     channel="email",

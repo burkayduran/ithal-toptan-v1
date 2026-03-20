@@ -45,6 +45,7 @@ export interface CampaignCreatePayload {
   shipping_cost_usd?: number;
   customs_rate?: number;
   margin_rate: number;
+  from_suggestion_id?: string;
 }
 
 export interface CampaignUpdatePayload {
@@ -52,6 +53,7 @@ export interface CampaignUpdatePayload {
   description?: string;
   category_id?: string | null;
   images?: string[];
+  status?: string;
   // Supplier / offer fields
   unit_price_usd?: number;
   moq?: number;

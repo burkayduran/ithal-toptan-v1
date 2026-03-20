@@ -92,7 +92,7 @@ async def _admin_token(client) -> str:
 async def test_calculate_price_valid(client):
     token = await _admin_token(client)
     resp = await client.post(
-        "/api/admin/calculate-price",
+        "/api/v2/admin/calculate-price",
         json={
             "unit_price_usd": 10.0,
             "moq": 100,
@@ -112,7 +112,7 @@ async def test_calculate_price_missing_fields(client):
     token = await _admin_token(client)
     # Missing required unit_price_usd and moq
     resp = await client.post(
-        "/api/admin/calculate-price",
+        "/api/v2/admin/calculate-price",
         json={"shipping_cost_usd": 1.0},
         headers=auth_headers(token),
     )
@@ -123,7 +123,7 @@ async def test_calculate_price_invalid_values(client):
     token = await _admin_token(client)
     # unit_price_usd must be > 0
     resp = await client.post(
-        "/api/admin/calculate-price",
+        "/api/v2/admin/calculate-price",
         json={"unit_price_usd": -5.0, "moq": 10},
         headers=auth_headers(token),
     )
@@ -131,7 +131,7 @@ async def test_calculate_price_invalid_values(client):
 
 
 async def test_calculate_price_requires_admin(client):
-    resp = await client.post("/api/admin/calculate-price", json={
+    resp = await client.post("/api/v2/admin/calculate-price", json={
         "unit_price_usd": 10.0,
         "moq": 100,
     })

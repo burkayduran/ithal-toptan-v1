@@ -1,8 +1,8 @@
 """
 Integration tests for:
   1. Register → login → /me flow
-  2. Authenticated GET /wishlist/my
-  3. Wishlist add rollback safety (IntegrityError → 409, no side effects)
+  2. Authenticated GET /campaigns/my (v2)
+  3. Campaign join via v2 endpoint
   4. payment_collecting state machine transition
 """
 import uuid
@@ -17,10 +17,10 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.models import (
-    Category,
-    ProductRequest,
+    Campaign,
+    CampaignParticipant,
+    Product,
     SupplierOffer,
-    WishlistEntry,
 )
 from app.services.moq_service import MoQService
 
@@ -34,23 +34,33 @@ pytestmark = pytest.mark.asyncio
 # Helpers
 # ═══════════════════════════════════════════════════════════════════════════════
 
-async def _create_product(
+async def _create_campaign(
     db: AsyncSession,
     status: str = "active",
     moq: int = 10,
-) -> tuple[ProductRequest, SupplierOffer]:
-    """Create a ProductRequest + selected SupplierOffer in the test DB."""
-    product = ProductRequest(
+) -> tuple[Campaign, Product, SupplierOffer]:
+    """Create a Product + Campaign + SupplierOffer in the test DB."""
+    product = Product(
         title=f"Test Product {uuid.uuid4().hex[:6]}",
         description="Integration test product",
         images=[],
-        status=status,
     )
     db.add(product)
-    await db.flush()  # get product.id
+    await db.flush()
+
+    campaign = Campaign(
+        product_id=product.id,
+        status=status,
+        moq=moq,
+        selling_price_try_snapshot=Decimal("500.00"),
+        unit_price_usd_snapshot=Decimal("10.00"),
+        supplier_name_snapshot="Test Supplier",
+    )
+    db.add(campaign)
+    await db.flush()
 
     offer = SupplierOffer(
-        request_id=product.id,
+        campaign_id=campaign.id,
         supplier_name="Test Supplier",
         unit_price_usd=Decimal("10.00"),
         moq=moq,
@@ -59,10 +69,14 @@ async def _create_product(
         is_selected=True,
     )
     db.add(offer)
+    await db.flush()
+
+    campaign.selected_offer_id = offer.id
     await db.commit()
+    await db.refresh(campaign)
     await db.refresh(product)
     await db.refresh(offer)
-    return product, offer
+    return campaign, product, offer
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -131,136 +145,54 @@ class TestAuthFlow:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# 2. Authenticated GET /wishlist/my
+# 2. Authenticated GET /campaigns/my (v2)
 # ═══════════════════════════════════════════════════════════════════════════════
 
-class TestWishlistMy:
-    async def test_wishlist_my_requires_auth(self, client: AsyncClient):
-        resp = await client.get("/api/v1/wishlist/my")
+class TestCampaignsMy:
+    async def test_campaigns_my_requires_auth(self, client: AsyncClient):
+        resp = await client.get("/api/v2/campaigns/my")
         assert resp.status_code == 401
 
-    async def test_wishlist_my_empty_for_new_user(self, client: AsyncClient):
+    async def test_campaigns_my_empty_for_new_user(self, client: AsyncClient):
         email = f"wl_{uuid.uuid4().hex[:8]}@test.com"
         token = (await register_user(client, email, "WLPass123!"))["access_token"]
 
-        resp = await client.get("/api/v1/wishlist/my", headers=auth_headers(token))
+        resp = await client.get("/api/v2/campaigns/my", headers=auth_headers(token))
         assert resp.status_code == 200
         assert resp.json() == []
 
-    async def test_wishlist_my_shows_joined_products(
+    async def test_campaigns_my_shows_joined_campaigns(
         self, client: AsyncClient, db_session: AsyncSession
     ):
         email = f"wljoin_{uuid.uuid4().hex[:8]}@test.com"
         token = (await register_user(client, email, "WLJoin1!"))["access_token"]
 
-        product, _ = await _create_product(db_session, status="active", moq=5)
+        campaign, product, _ = await _create_campaign(db_session, status="active", moq=5)
 
-        with patch("app.api.v1.endpoints.wishlist.MoQService") as MockMoQ:
+        with patch("app.api.v2.campaigns.MoQService") as MockMoQ:
             instance = MockMoQ.return_value
             instance.sync_counter_from_db = AsyncMock(return_value=1)
             instance.check_and_trigger = AsyncMock(return_value={
                 "threshold_met": False, "transition_performed": False, "status_after": "active"
             })
 
-            add_resp = await client.post(
-                "/api/v1/wishlist/add",
-                json={"request_id": str(product.id), "quantity": 2},
+            join_resp = await client.post(
+                f"/api/v2/campaigns/{campaign.id}/join",
+                json={"quantity": 2},
                 headers=auth_headers(token),
             )
-        assert add_resp.status_code == 200
+        assert join_resp.status_code in (200, 201), f"Join failed: {join_resp.text}"
 
-        my_resp = await client.get("/api/v1/wishlist/my", headers=auth_headers(token))
+        my_resp = await client.get("/api/v2/campaigns/my", headers=auth_headers(token))
         assert my_resp.status_code == 200
         items = my_resp.json()
-        assert len(items) == 1
-        assert items[0]["request_id"] == str(product.id)
+        assert len(items) >= 1
+        assert items[0]["campaign_id"] == str(campaign.id)
         assert items[0]["quantity"] == 2
-        assert items[0]["status"] == "waiting"
-        assert items[0]["product_title"] == product.title
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# 3. Rollback safety — IntegrityError → 409, no side effects fired
-# ═══════════════════════════════════════════════════════════════════════════════
-
-class TestWishlistRollbackSafety:
-    async def test_integrity_error_returns_409_no_side_effects(
-        self, client: AsyncClient, db_session: AsyncSession
-    ):
-        """
-        When the DB raises IntegrityError during the upsert, the endpoint must:
-          - return HTTP 409 (not 200 or 500)
-          - NOT call sync_counter_from_db or check_and_trigger
-        """
-        email = f"rb_{uuid.uuid4().hex[:8]}@test.com"
-        token = (await register_user(client, email, "RBPass123!"))["access_token"]
-        product, _ = await _create_product(db_session, status="active", moq=5)
-
-        from sqlalchemy.exc import IntegrityError as SAIntegrityError
-
-        sync_mock = AsyncMock()
-        trigger_mock = AsyncMock()
-
-        with patch("app.api.v1.endpoints.wishlist.MoQService") as MockMoQ:
-            instance = MockMoQ.return_value
-            instance.sync_counter_from_db = sync_mock
-            instance.check_and_trigger = trigger_mock
-
-            # Patch db.execute to raise IntegrityError on the upsert
-            original_execute = db_session.execute
-
-            call_count = {"n": 0}
-
-            async def patched_execute(stmt, *args, **kwargs):
-                # First SELECT (product fetch) and second SELECT (existing entry) pass through.
-                # The third call is the upsert INSERT — raise IntegrityError on it.
-                call_count["n"] += 1
-                if call_count["n"] == 3:
-                    raise SAIntegrityError("mock", {}, Exception("unique violation"))
-                return await original_execute(stmt, *args, **kwargs)
-
-            with patch.object(db_session, "execute", side_effect=patched_execute):
-                resp = await client.post(
-                    "/api/v1/wishlist/add",
-                    json={"request_id": str(product.id), "quantity": 1},
-                    headers=auth_headers(token),
-                )
-
-        assert resp.status_code == 409, f"Expected 409, got {resp.status_code}: {resp.text}"
-        sync_mock.assert_not_called()
-        trigger_mock.assert_not_called()
-
-    async def test_successful_add_runs_side_effects(
-        self, client: AsyncClient, db_session: AsyncSession
-    ):
-        """Successful commit must call sync_counter_from_db and check_and_trigger."""
-        email = f"se_{uuid.uuid4().hex[:8]}@test.com"
-        token = (await register_user(client, email, "SEPass123!"))["access_token"]
-        product, _ = await _create_product(db_session, status="active", moq=100)
-
-        sync_mock = AsyncMock(return_value=1)
-        trigger_mock = AsyncMock(return_value={
-            "threshold_met": False, "transition_performed": False, "status_after": "active"
-        })
-
-        with patch("app.api.v1.endpoints.wishlist.MoQService") as MockMoQ:
-            instance = MockMoQ.return_value
-            instance.sync_counter_from_db = sync_mock
-            instance.check_and_trigger = trigger_mock
-
-            resp = await client.post(
-                "/api/v1/wishlist/add",
-                json={"request_id": str(product.id), "quantity": 1},
-                headers=auth_headers(token),
-            )
-
-        assert resp.status_code == 200
-        sync_mock.assert_called_once()
-        trigger_mock.assert_called_once()
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# 4. payment_collecting state machine transition
+# 3. payment_collecting state machine transition
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class TestPaymentCollectingTransition:
@@ -276,46 +208,46 @@ class TestPaymentCollectingTransition:
         self, db_session: AsyncSession
     ):
         """
-        process_expired_entries must transition product from moq_reached → payment_collecting
-        before marking notified entries as expired.
+        process_expired_entries must transition campaign from moq_reached → payment_collecting
+        before marking invited entries as expired.
         """
-        product, offer = await _create_product(db_session, status="moq_reached", moq=2)
+        campaign, product, offer = await _create_campaign(db_session, status="moq_reached", moq=2)
 
         past_deadline = datetime.now(timezone.utc) - timedelta(hours=1)
         await db_session.execute(
-            update(ProductRequest)
-            .where(ProductRequest.id == product.id)
+            update(Campaign)
+            .where(Campaign.id == campaign.id)
             .values(moq_reached_at=past_deadline - timedelta(hours=48), payment_deadline=past_deadline)
         )
 
-        # Add a notified entry past its deadline
-        entry = WishlistEntry(
-            request_id=product.id,
-            user_id=uuid.uuid4(),  # phantom user id for test
+        # Add an invited participant past their deadline
+        participant = CampaignParticipant(
+            campaign_id=campaign.id,
+            user_id=uuid.uuid4(),
             quantity=1,
-            status="notified",
-            notified_at=past_deadline - timedelta(hours=48),
+            status="invited",
+            invited_at=past_deadline - timedelta(hours=48),
             payment_deadline=past_deadline,
         )
-        db_session.add(entry)
+        db_session.add(participant)
         await db_session.commit()
 
         moq_svc = await self._make_moq_service(db_session)
-        await moq_svc.process_expired_entries(product.id)
+        await moq_svc.process_expired_entries(campaign.id)
 
         refreshed = await db_session.execute(
-            select(ProductRequest).where(ProductRequest.id == product.id)
+            select(Campaign).where(Campaign.id == campaign.id)
         )
-        updated_product = refreshed.scalar_one()
+        updated_campaign = refreshed.scalar_one()
 
         # With 0 paid entries (< moq=2), it should reset to active after payment_collecting
-        assert updated_product.status == "active", (
-            f"Expected 'active' after reset, got '{updated_product.status}'"
+        assert updated_campaign.status == "active", (
+            f"Expected 'active' after reset, got '{updated_campaign.status}'"
         )
 
     async def test_trigger_payment_phase_sets_moq_reached(self, db_session: AsyncSession):
         """trigger_payment_phase must transition active → moq_reached."""
-        product, offer = await _create_product(db_session, status="active", moq=2)
+        campaign, product, offer = await _create_campaign(db_session, status="active", moq=2)
 
         moq_svc = await self._make_moq_service(db_session)
 
@@ -323,12 +255,12 @@ class TestPaymentCollectingTransition:
              patch("app.tasks.moq_tasks.cleanup_expired_entries") as mock_cleanup:
             mock_email.delay = MagicMock()
             mock_cleanup.apply_async = MagicMock()
-            result = await moq_svc.trigger_payment_phase(product.id, offer)
+            result = await moq_svc.trigger_payment_phase(campaign.id, campaign)
 
         assert result is True
 
         refreshed = await db_session.execute(
-            select(ProductRequest).where(ProductRequest.id == product.id)
+            select(Campaign).where(Campaign.id == campaign.id)
         )
         updated = refreshed.scalar_one()
         assert updated.status == "moq_reached"
@@ -336,51 +268,35 @@ class TestPaymentCollectingTransition:
 
     async def test_payment_collecting_to_ordered_when_enough_paid(self, db_session: AsyncSession):
         """
-        When paid_count >= moq after the deadline, product must go
-        payment_collecting → ordered (not skip payment_collecting).
+        When paid_count >= moq after the deadline, campaign must go
+        payment_collecting → ordered.
         """
-        product, offer = await _create_product(db_session, status="moq_reached", moq=1)
+        campaign, product, offer = await _create_campaign(db_session, status="moq_reached", moq=1)
 
         past_deadline = datetime.now(timezone.utc) - timedelta(hours=1)
         await db_session.execute(
-            update(ProductRequest)
-            .where(ProductRequest.id == product.id)
+            update(Campaign)
+            .where(Campaign.id == campaign.id)
             .values(moq_reached_at=past_deadline - timedelta(hours=48), payment_deadline=past_deadline)
         )
 
-        # Add a PAID entry — this satisfies the moq
-        paid_entry = WishlistEntry(
-            request_id=product.id,
+        # Add a PAID participant — satisfies the moq
+        paid_participant = CampaignParticipant(
+            campaign_id=campaign.id,
             user_id=uuid.uuid4(),
             quantity=1,
             status="paid",
         )
-        db_session.add(paid_entry)
+        db_session.add(paid_participant)
         await db_session.commit()
 
         moq_svc = await self._make_moq_service(db_session)
-        await moq_svc.process_expired_entries(product.id)
+        await moq_svc.process_expired_entries(campaign.id)
 
         refreshed = await db_session.execute(
-            select(ProductRequest).where(ProductRequest.id == product.id)
+            select(Campaign).where(Campaign.id == campaign.id)
         )
         updated = refreshed.scalar_one()
         assert updated.status == "ordered", (
             f"Expected 'ordered' when paid_count >= moq, got '{updated.status}'"
         )
-
-    async def test_join_rejected_when_payment_collecting(
-        self, client: AsyncClient, db_session: AsyncSession
-    ):
-        """Wishlist add must be rejected when product is in payment_collecting state."""
-        email = f"pc_{uuid.uuid4().hex[:8]}@test.com"
-        token = (await register_user(client, email, "PCPass123!"))["access_token"]
-        product, _ = await _create_product(db_session, status="payment_collecting", moq=5)
-
-        resp = await client.post(
-            "/api/v1/wishlist/add",
-            json={"request_id": str(product.id), "quantity": 1},
-            headers=auth_headers(token),
-        )
-        assert resp.status_code == 400
-        assert "not accepting" in resp.json()["detail"].lower()

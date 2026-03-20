@@ -122,9 +122,25 @@ async def confirm_payment(
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
 
+    # === DEADLINE GUARD ===
+    now = datetime.now(timezone.utc)
+
+    # 1. Payment deadline geçmiş mi?
+    if participant.payment_deadline and now > participant.payment_deadline:
+        raise HTTPException(
+            status_code=400,
+            detail="Ödeme süresi dolmuş. Bu kampanya için ödeme artık kabul edilmiyor.",
+        )
+
+    # 2. Campaign hâlâ ödeme kabul ediyor mu?
+    if campaign.status not in ("moq_reached", "payment_collecting"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Bu kampanya şu an ödeme kabul etmiyor (durum: '{campaign.status}').",
+        )
+
     selling_price = float(campaign.selling_price_try_snapshot) if campaign.selling_price_try_snapshot else 0.0
     amount_try = round(participant.quantity * selling_price, 2)
-    now = datetime.now(timezone.utc)
 
     # Update participant status
     old_status = participant.status

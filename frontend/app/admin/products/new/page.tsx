@@ -47,6 +47,7 @@ export default function NewProductPage() {
   // Pre-fill from product request query params (D3)
   const prefillTitle = searchParams.get("title") ?? "";
   const prefillDesc = searchParams.get("description") ?? "";
+  const fromSuggestionId = searchParams.get("from_request") ?? null;
 
   const [form, setForm] = useState({
     title: prefillTitle,
@@ -112,6 +113,7 @@ export default function NewProductPage() {
         shipping_cost_usd: parseFloat(form.shipping_cost_usd) || 0,
         customs_rate: (parseFloat(form.customs_rate) || 35) / 100,
         margin_rate: (parseFloat(form.margin_rate) || 30) / 100,
+        from_suggestion_id: fromSuggestionId || undefined,
       },
       {
         onSuccess: (data) => {

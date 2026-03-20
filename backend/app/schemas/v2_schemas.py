@@ -84,6 +84,7 @@ class CampaignCreatePayload(BaseModel):
     shipping_cost_usd: float = 0
     customs_rate: float = 0.35
     margin_rate: float = 0.30
+    from_suggestion_id: Optional[UUID] = None
 
 
 class CampaignUpdatePayload(BaseModel):
@@ -91,6 +92,7 @@ class CampaignUpdatePayload(BaseModel):
     description: Optional[str] = None
     category_id: Optional[UUID] = None
     images: Optional[List[str]] = None
+    status: Optional[CampaignStatus] = None
     supplier_name: Optional[str] = None
     supplier_country: Optional[str] = None
     alibaba_product_url: Optional[str] = None
