@@ -154,23 +154,14 @@ async def confirm_payment(
     )
     db.add(tx)
 
-    # Reverse dual-write: shadow to legacy
-    try:
-        from app.services.reverse_dual_write import ReverseDualWrite
-        rdw = ReverseDualWrite(db)
-        await rdw.shadow_payment_confirm(participant, campaign, amount_try, now)
-    except Exception:
-        pass
-
     await db.commit()
     await db.refresh(participant)
 
-    # Trigger email if legacy_entry_id exists
-    if participant.legacy_entry_id:
-        try:
-            from app.tasks.email_tasks import send_payment_success_email
-            send_payment_success_email.delay(str(participant.legacy_entry_id))
-        except Exception:
-            pass
+    # Trigger payment success email
+    try:
+        from app.tasks.email_tasks import send_payment_success_email
+        send_payment_success_email.delay(str(participant.id))
+    except Exception:
+        pass
 
     return await _participant_to_response(participant, db)

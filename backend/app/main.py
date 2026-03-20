@@ -15,8 +15,7 @@ from app.core.redis import get_redis, close_redis
 # Initialize logging
 setup_logging()
 from app.db.session import engine
-from app.api.v1.endpoints import auth, products, wishlist, payments
-from app.api.admin import admin
+from app.api.v1.endpoints import auth
 from app.api.v2 import campaigns as v2_campaigns, suggestions as v2_suggestions, payments as v2_payments
 from app.api.admin import admin_v2
 from sse_starlette.sse import EventSourceResponse
@@ -68,10 +67,6 @@ app.add_middleware(
 
 # Include routers
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
-app.include_router(products.router, prefix="/api/v1/products", tags=["Products"])
-app.include_router(wishlist.router, prefix="/api/v1/wishlist", tags=["Wishlist"])
-app.include_router(payments.router, prefix="/api/v1/payments", tags=["Payments"])
-app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
 
 # V2 routers
 app.include_router(v2_campaigns.router, prefix="/api/v2/campaigns", tags=["V2 Campaigns"])
@@ -83,43 +78,40 @@ app.include_router(admin_v2.router, prefix="/api/v2/admin", tags=["V2 Admin"])
 # SSE endpoint for real-time MoQ progress
 _SSE_ALLOWED_STATUSES = {"active", "moq_reached", "payment_collecting", "ordered", "delivered"}
 
-@app.get("/api/v1/moq/progress/{request_id}")
+@app.get("/api/v2/moq/progress/{campaign_id}")
 @limiter.limit("30/minute")
-async def moq_progress_stream(request: Request, request_id: UUID):
+async def moq_progress_stream(request: Request, campaign_id: UUID):
     """
     Server-Sent Events endpoint for real-time MoQ progress updates.
     Frontend can use EventSource to listen for updates.
-    Only publicly visible products (non-draft) are accessible.
+    Only publicly visible campaigns (non-draft) are accessible.
     """
     redis_client = await get_redis()
 
     from app.db.session import AsyncSessionLocal
-    from app.models.models import ProductRequest
+    from app.models.models import Campaign
     from sqlalchemy import select as sa_select
 
     async with AsyncSessionLocal() as db:
         result = await db.execute(
-            sa_select(ProductRequest.status).where(ProductRequest.id == request_id)
+            sa_select(Campaign.status).where(Campaign.id == campaign_id)
         )
-        row = result.scalar_one_or_none()
-        if row is None or row not in _SSE_ALLOWED_STATUSES:
+        status = result.scalar_one_or_none()
+        if status is None or status not in _SSE_ALLOWED_STATUSES:
             raise HTTPException(status_code=404, detail="Not found")
 
     async def event_generator():
-        # Subscribe to Redis pub/sub channel
-        channel = f"moq:progress:{str(request_id)}"
+        channel = f"moq:progress:{str(campaign_id)}"
         pubsub = redis_client.pubsub()
         await pubsub.subscribe(channel)
 
-        # Send initial value
         from app.services.moq_service import MoQService
 
         async with AsyncSessionLocal() as db:
             moq_service = MoQService(db, redis_client)
-            current_count = await moq_service.get_current_count(request_id)
+            current_count = await moq_service.get_current_count(campaign_id)
             yield {"data": str(current_count)}
 
-        # Listen for updates
         try:
             while True:
                 message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=30)

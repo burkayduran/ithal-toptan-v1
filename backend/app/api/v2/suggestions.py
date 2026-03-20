@@ -30,15 +30,6 @@ async def create_suggestion(
         created_by=current_user.id,
     )
     db.add(suggestion)
-    await db.flush()
-
-    # Reverse dual-write: shadow to legacy ProductRequest
-    try:
-        from app.services.reverse_dual_write import ReverseDualWrite
-        rdw = ReverseDualWrite(db)
-        await rdw.shadow_create_suggestion(suggestion)
-    except Exception:
-        pass
 
     await db.commit()
     await db.refresh(suggestion)

@@ -1,19 +1,17 @@
 """
 MoQ (Minimum Order Quantity) Service
-Redis-based atomic counter and trigger logic
+Redis-based atomic counter and trigger logic.
+Primary source: campaigns + campaign_participants tables.
 """
 from datetime import datetime, timedelta, timezone
-from decimal import Decimal
 from uuid import UUID
 import redis.asyncio as aioredis
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, update
 
 from app.models.models import (
-    ProductRequest,
-    SupplierOffer,
-    WishlistEntry,
-    Notification
+    Campaign, CampaignParticipant, CampaignStatusHistory,
+    Notification,
 )
 
 
@@ -24,32 +22,32 @@ class MoQService:
         self.db = db
         self.redis = redis_client
 
-    def _get_counter_key(self, request_id: UUID) -> str:
+    def _get_counter_key(self, campaign_id: UUID) -> str:
         """Get Redis key for MoQ counter."""
-        return f"moq:count:{request_id}"
+        return f"moq:count:{campaign_id}"
 
-    async def get_current_count(self, request_id: UUID) -> int:
-        """Get current wishlist count from Redis (with DB fallback)."""
-        count = await self.redis.get(self._get_counter_key(request_id))
+    async def get_current_count(self, campaign_id: UUID) -> int:
+        """Get current participant count from Redis (with DB fallback)."""
+        count = await self.redis.get(self._get_counter_key(campaign_id))
 
         if count is not None:
             return int(count)
 
         result = await self.db.execute(
-            select(func.coalesce(func.sum(WishlistEntry.quantity), 0))
+            select(func.coalesce(func.sum(CampaignParticipant.quantity), 0))
             .where(
-                WishlistEntry.request_id == request_id,
-                WishlistEntry.status.in_(["waiting", "notified"])
+                CampaignParticipant.campaign_id == campaign_id,
+                CampaignParticipant.status.in_(["joined", "invited"])
             )
         )
-        db_count = result.scalar() or 0
+        db_count = int(result.scalar() or 0)
 
-        await self.redis.set(self._get_counter_key(request_id), db_count, ex=30 * 24 * 3600)
+        await self.redis.set(self._get_counter_key(campaign_id), db_count, ex=30 * 24 * 3600)
         return db_count
 
-    async def increment(self, request_id: UUID, quantity: int = 1) -> int:
+    async def increment(self, campaign_id: UUID, quantity: int = 1) -> int:
         """Increment MoQ counter atomically with TTL bootstrap via Lua."""
-        key = self._get_counter_key(request_id)
+        key = self._get_counter_key(campaign_id)
         script = """
 local key = KEYS[1]
 local qty = tonumber(ARGV[1])
@@ -62,12 +60,12 @@ return val
 """
         new_count = int(await self.redis.eval(script, 1, key, quantity, 30 * 24 * 3600))
 
-        await self.redis.publish(f"moq:progress:{request_id}", str(new_count))
+        await self.redis.publish(f"moq:progress:{campaign_id}", str(new_count))
         return new_count
 
-    async def decrement(self, request_id: UUID, quantity: int = 1) -> int:
+    async def decrement(self, campaign_id: UUID, quantity: int = 1) -> int:
         """Decrement MoQ counter atomically with Lua and floor at zero."""
-        key = self._get_counter_key(request_id)
+        key = self._get_counter_key(campaign_id)
         script = """
 local key = KEYS[1]
 local qty = tonumber(ARGV[1])
@@ -83,69 +81,56 @@ end
 return val
 """
         new_count = int(await self.redis.eval(script, 1, key, quantity, 30 * 24 * 3600))
-        await self.redis.publish(f"moq:progress:{request_id}", str(new_count))
+        await self.redis.publish(f"moq:progress:{campaign_id}", str(new_count))
         return new_count
 
-
-    async def sync_counter_from_db(self, request_id: UUID) -> int:
+    async def sync_counter_from_db(self, campaign_id: UUID) -> int:
         """Force-sync Redis counter from DB aggregate to avoid drift under concurrent updates."""
         result = await self.db.execute(
-            select(func.coalesce(func.sum(WishlistEntry.quantity), 0))
+            select(func.coalesce(func.sum(CampaignParticipant.quantity), 0))
             .where(
-                WishlistEntry.request_id == request_id,
-                WishlistEntry.status.in_(["waiting", "notified"])
+                CampaignParticipant.campaign_id == campaign_id,
+                CampaignParticipant.status.in_(["joined", "invited"])
             )
         )
         db_count = int(result.scalar() or 0)
-        await self.redis.set(self._get_counter_key(request_id), db_count, ex=30 * 24 * 3600)
-        await self.redis.publish(f"moq:progress:{request_id}", str(db_count))
+        await self.redis.set(self._get_counter_key(campaign_id), db_count, ex=30 * 24 * 3600)
+        await self.redis.publish(f"moq:progress:{campaign_id}", str(db_count))
         return db_count
 
-    async def check_and_trigger(self, request_id: UUID) -> dict:
+    async def check_and_trigger(self, campaign_id: UUID) -> dict:
         """Check threshold and attempt atomic payment-phase transition."""
-        current_count = await self.get_current_count(request_id)
+        current_count = await self.get_current_count(campaign_id)
 
-        product_result = await self.db.execute(
-            select(ProductRequest).where(ProductRequest.id == request_id)
+        result = await self.db.execute(
+            select(Campaign).where(Campaign.id == campaign_id)
         )
-        product = product_result.scalar_one_or_none()
+        campaign = result.scalar_one_or_none()
 
-        if not product or product.status != "active":
-            return {"threshold_met": False, "transition_performed": False, "status_after": product.status if product else "missing"}
+        if not campaign or campaign.status != "active":
+            return {"threshold_met": False, "transition_performed": False, "status_after": campaign.status if campaign else "missing"}
 
-        offer_result = await self.db.execute(
-            select(SupplierOffer).where(
-                SupplierOffer.request_id == request_id,
-                SupplierOffer.is_selected == True
-            )
-        )
-        offer = offer_result.scalar_one_or_none()
+        if not campaign.moq or campaign.moq <= 0 or current_count < campaign.moq:
+            return {"threshold_met": False, "transition_performed": False, "status_after": campaign.status}
 
-        if not offer or offer.moq is None or offer.moq <= 0:
-            return {"threshold_met": False, "transition_performed": False, "status_after": product.status}
+        transition_performed = await self.trigger_payment_phase(campaign_id, campaign)
 
-        threshold_met = current_count >= offer.moq
-        if not threshold_met:
-            return {"threshold_met": False, "transition_performed": False, "status_after": product.status}
-
-        transition_performed = await self.trigger_payment_phase(request_id, offer)
-
-        refreshed = await self.db.execute(select(ProductRequest.status).where(ProductRequest.id == request_id))
-        status_after = refreshed.scalar_one_or_none() or product.status
+        refreshed = await self.db.execute(select(Campaign.status).where(Campaign.id == campaign_id))
+        status_after = refreshed.scalar_one_or_none() or campaign.status
         return {"threshold_met": True, "transition_performed": transition_performed, "status_after": status_after}
 
-    async def trigger_payment_phase(self, request_id: UUID, offer: SupplierOffer) -> bool:
+    async def trigger_payment_phase(self, campaign_id: UUID, campaign: Campaign) -> bool:
         """Trigger 48-hour payment window when MoQ is reached.
         All DB mutations happen in a single transaction to avoid partial state."""
         now = datetime.now(timezone.utc)
         deadline = now + timedelta(hours=48)
 
-        # Status güncellemesi
-        product_update = await self.db.execute(
-            update(ProductRequest)
+        # Campaign status: active → moq_reached
+        campaign_update = await self.db.execute(
+            update(Campaign)
             .where(
-                ProductRequest.id == request_id,
-                ProductRequest.status == "active"
+                Campaign.id == campaign_id,
+                Campaign.status == "active"
             )
             .values(
                 status="moq_reached",
@@ -154,36 +139,43 @@ return val
             )
         )
 
-        if product_update.rowcount == 0:
+        if campaign_update.rowcount == 0:
             await self.db.rollback()
             return False
 
-        # Wishlist güncellemesi
+        # Participants: joined → invited
         await self.db.execute(
-            update(WishlistEntry)
+            update(CampaignParticipant)
             .where(
-                WishlistEntry.request_id == request_id,
-                WishlistEntry.status == "waiting"
+                CampaignParticipant.campaign_id == campaign_id,
+                CampaignParticipant.status == "joined"
             )
             .values(
-                status="notified",
-                notified_at=now,
+                status="invited",
+                invited_at=now,
                 payment_deadline=deadline
             )
         )
 
-        # Notification oluşturma (AYNI transaction içinde)
-        notified_result = await self.db.execute(
-            select(WishlistEntry).where(
-                WishlistEntry.request_id == request_id,
-                WishlistEntry.status == "notified"
+        # Status history
+        self.db.add(CampaignStatusHistory(
+            campaign_id=campaign_id,
+            old_status="active",
+            new_status="moq_reached",
+            reason="MOQ threshold reached",
+        ))
+
+        # Notifications
+        invited_result = await self.db.execute(
+            select(CampaignParticipant).where(
+                CampaignParticipant.campaign_id == campaign_id,
+                CampaignParticipant.status == "invited"
             )
         )
-        notified_entries = notified_result.scalars().all()
 
         existing_notif_result = await self.db.execute(
             select(Notification.user_id).where(
-                Notification.request_id == request_id,
+                Notification.request_id == campaign.legacy_request_id,
                 Notification.type == "moq_reached",
                 Notification.channel == "email",
                 Notification.status.in_(["pending", "sent", "delivered", "opened", "clicked"]),
@@ -191,13 +183,13 @@ return val
         )
         existing_user_ids = {row[0] for row in existing_notif_result.all()}
 
-        for entry in notified_entries:
-            if entry.user_id in existing_user_ids:
+        for participant in invited_result.scalars().all():
+            if participant.user_id in existing_user_ids:
                 continue
             self.db.add(
                 Notification(
-                    user_id=entry.user_id,
-                    request_id=request_id,
+                    user_id=participant.user_id,
+                    request_id=campaign.legacy_request_id,
                     type="moq_reached",
                     channel="email",
                     subject="Sipariş hazır! 48 saat içinde ödeme yapın",
@@ -205,129 +197,117 @@ return val
                 )
             )
 
-        # Dual-write: shadow moq_reached
-        try:
-            from app.services.dual_write_service import DualWriteService
-            dw = DualWriteService(self.db)
-            await dw.shadow_moq_reached(
-                legacy_request_id=request_id,
-                moq_reached_at=now,
-                payment_deadline=deadline,
-            )
-        except Exception:
-            import logging
-            logging.getLogger("dual_write").exception("shadow_moq_reached failed")
-
-        # TEK COMMIT — status + wishlist + notification hepsi atomik
+        # TEK COMMIT — status + participants + notification hepsi atomik
         await self.db.commit()
 
         # Side effects (Celery tasks) commit sonrası
         from app.tasks.email_tasks import send_moq_reached_email
         from app.tasks.moq_tasks import cleanup_expired_entries
 
-        send_moq_reached_email.delay(str(request_id), deadline.isoformat())
-        cleanup_expired_entries.apply_async(args=[str(request_id)], countdown=48 * 3600)
+        send_moq_reached_email.delay(str(campaign_id), deadline.isoformat())
+        cleanup_expired_entries.apply_async(args=[str(campaign_id)], countdown=48 * 3600)
 
         return True
 
-    async def process_expired_entries(self, request_id: UUID):
+    async def process_expired_entries(self, campaign_id: UUID):
         """Process entries after 48-hour deadline."""
         now = datetime.now(timezone.utc)
 
-        # Transition product moq_reached → payment_collecting to close new joins
+        # Transition campaign moq_reached → payment_collecting
         await self.db.execute(
-            update(ProductRequest)
+            update(Campaign)
             .where(
-                ProductRequest.id == request_id,
-                ProductRequest.status == "moq_reached",
+                Campaign.id == campaign_id,
+                Campaign.status == "moq_reached",
             )
             .values(status="payment_collecting")
         )
 
+        # Expire unpaid participants
         await self.db.execute(
-            update(WishlistEntry)
+            update(CampaignParticipant)
             .where(
-                WishlistEntry.request_id == request_id,
-                WishlistEntry.status == "notified",
-                WishlistEntry.payment_deadline < now
+                CampaignParticipant.campaign_id == campaign_id,
+                CampaignParticipant.status == "invited",
+                CampaignParticipant.payment_deadline < now
             )
             .values(status="expired")
         )
 
         await self.db.commit()
 
+        # Check paid count
         paid_result = await self.db.execute(
-            select(func.coalesce(func.sum(WishlistEntry.quantity), 0))
+            select(func.coalesce(func.sum(CampaignParticipant.quantity), 0))
             .where(
-                WishlistEntry.request_id == request_id,
-                WishlistEntry.status == "paid"
+                CampaignParticipant.campaign_id == campaign_id,
+                CampaignParticipant.status == "paid"
             )
         )
-        paid_count = paid_result.scalar() or 0
+        paid_count = int(paid_result.scalar() or 0)
 
-        offer_result = await self.db.execute(
-            select(SupplierOffer).where(
-                SupplierOffer.request_id == request_id,
-                SupplierOffer.is_selected == True
-            )
+        campaign_result = await self.db.execute(
+            select(Campaign).where(Campaign.id == campaign_id)
         )
-        offer = offer_result.scalar_one_or_none()
-
-        if not offer:
+        campaign = campaign_result.scalar_one_or_none()
+        if not campaign:
             return
 
-        if paid_count >= offer.moq:
-            await self._create_batch_order(request_id, offer, paid_count)
+        if paid_count >= campaign.moq:
+            await self._create_procurement_order(campaign_id, campaign, paid_count)
         else:
-            await self._reset_to_active(request_id)
+            await self._reset_to_active(campaign_id)
 
-    async def _create_batch_order(self, request_id: UUID, offer: SupplierOffer, quantity: int):
-        from app.models.models import BatchOrder
+    async def _create_procurement_order(self, campaign_id: UUID, campaign: Campaign, quantity: int):
+        from app.models.models import ProcurementOrder
 
-        total_cost_usd = float(offer.unit_price_usd) * quantity
-        if offer.shipping_cost_usd:
-            total_cost_usd += float(offer.shipping_cost_usd)
+        total_cost_usd = float(campaign.unit_price_usd_snapshot or 0) * quantity + float(campaign.shipping_cost_usd_snapshot or 0)
 
-        batch_order = BatchOrder(
-            request_id=request_id,
-            offer_id=offer.id,
+        order = ProcurementOrder(
+            campaign_id=campaign_id,
+            offer_id=campaign.selected_offer_id,
             total_quantity=quantity,
-            total_cost_usd=Decimal(str(total_cost_usd)),
-            status="pending"
+            total_cost_usd=total_cost_usd,
+            fx_rate_at_order=float(campaign.fx_rate_snapshot) if campaign.fx_rate_snapshot else None,
+            status="pending",
         )
+        self.db.add(order)
 
-        self.db.add(batch_order)
-
+        now = datetime.now(timezone.utc)
         await self.db.execute(
-            update(ProductRequest)
-            .where(
-                ProductRequest.id == request_id,
-                ProductRequest.status == "payment_collecting",
-            )
-            .values(status="ordered")
+            update(Campaign)
+            .where(Campaign.id == campaign_id, Campaign.status == "payment_collecting")
+            .values(status="ordered", ordered_at=now)
         )
+
+        self.db.add(CampaignStatusHistory(
+            campaign_id=campaign_id,
+            old_status="payment_collecting",
+            new_status="ordered",
+            reason="Sufficient payments collected",
+        ))
 
         await self.db.commit()
 
-    async def _reset_to_active(self, request_id: UUID):
+    async def _reset_to_active(self, campaign_id: UUID):
         await self.db.execute(
-            update(WishlistEntry)
+            update(CampaignParticipant)
             .where(
-                WishlistEntry.request_id == request_id,
-                WishlistEntry.status == "expired"
+                CampaignParticipant.campaign_id == campaign_id,
+                CampaignParticipant.status == "expired"
             )
             .values(
-                status="waiting",
-                notified_at=None,
+                status="joined",
+                invited_at=None,
                 payment_deadline=None
             )
         )
 
         await self.db.execute(
-            update(ProductRequest)
+            update(Campaign)
             .where(
-                ProductRequest.id == request_id,
-                ProductRequest.status == "payment_collecting",
+                Campaign.id == campaign_id,
+                Campaign.status == "payment_collecting",
             )
             .values(
                 status="active",
@@ -336,7 +316,14 @@ return val
             )
         )
 
+        self.db.add(CampaignStatusHistory(
+            campaign_id=campaign_id,
+            old_status="payment_collecting",
+            new_status="active",
+            reason="Insufficient payments, reset",
+        ))
+
         await self.db.commit()
 
-        current_count = await self.get_current_count(request_id)
-        await self.redis.set(self._get_counter_key(request_id), current_count, ex=30 * 24 * 3600)
+        current = await self.get_current_count(campaign_id)
+        await self.redis.set(self._get_counter_key(campaign_id), current, ex=30 * 24 * 3600)

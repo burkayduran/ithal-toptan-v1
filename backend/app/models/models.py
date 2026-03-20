@@ -63,7 +63,7 @@ class Category(Base):
 # ─── ProductRequest ───────────────────────────────────────────────────────────
 
 class ProductRequest(Base):
-    __tablename__ = "product_requests"
+    __tablename__ = "legacy_product_requests"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -101,7 +101,7 @@ class SupplierOffer(Base):
     __tablename__ = "supplier_offers"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    request_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("product_requests.id"), nullable=False)
+    request_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("legacy_product_requests.id"), nullable=False)
     
     supplier_name: Mapped[Optional[str]] = mapped_column(String(255))
     supplier_country: Mapped[str] = mapped_column(String(10), default="CN")
@@ -131,10 +131,10 @@ class SupplierOffer(Base):
 # ─── WishlistEntry ────────────────────────────────────────────────────────────
 
 class WishlistEntry(Base):
-    __tablename__ = "wishlist_entries"
+    __tablename__ = "legacy_wishlist_entries"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    request_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("product_requests.id"), nullable=False, index=True)
+    request_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("legacy_product_requests.id"), nullable=False, index=True)
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
     quantity: Mapped[int] = mapped_column(Integer, default=1)
     
@@ -160,12 +160,12 @@ class WishlistEntry(Base):
 # ─── Payment ──────────────────────────────────────────────────────────────────
 
 class Payment(Base):
-    __tablename__ = "payments"
+    __tablename__ = "legacy_payments"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    wishlist_entry_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("wishlist_entries.id"), nullable=False)
+    wishlist_entry_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("legacy_wishlist_entries.id"), nullable=False)
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
-    request_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("product_requests.id"), nullable=False, index=True)
+    request_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("legacy_product_requests.id"), nullable=False, index=True)
     
     amount_try: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     quantity: Mapped[int] = mapped_column(Integer, default=1)
@@ -190,10 +190,10 @@ class Payment(Base):
 # ─── BatchOrder ───────────────────────────────────────────────────────────────
 
 class BatchOrder(Base):
-    __tablename__ = "batch_orders"
+    __tablename__ = "legacy_batch_orders"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    request_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("product_requests.id"), nullable=False)
+    request_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("legacy_product_requests.id"), nullable=False)
     offer_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("supplier_offers.id"), nullable=False)
     
     total_quantity: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -219,8 +219,9 @@ class Notification(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
-    request_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("product_requests.id"))
-    
+    request_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True))
+    campaign_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("campaigns.id"))
+
     # Type: moq_reached, payment_reminder, order_confirmed, shipped, delivered
     type: Mapped[str] = mapped_column(String(50), nullable=False)
     channel: Mapped[str] = mapped_column(String(20), default="email")  # email, sms, push

@@ -13,9 +13,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import require_admin
 from app.db.session import get_db
+from sqlalchemy.exc import IntegrityError as SQLIntegrityError
+
 from app.models.models import (
     Campaign, CampaignParticipant, CampaignStatusHistory,
-    Product, ProductSuggestion, SupplierOffer, User,
+    Category, Product, ProductSuggestion, SupplierOffer, User,
 )
 from app.schemas.v2_schemas import (
     AdminCampaignDetailResponse,
@@ -24,6 +26,13 @@ from app.schemas.v2_schemas import (
     CampaignResponse,
     SuggestionResponse,
     SuggestionUpdatePayload,
+)
+from app.schemas.schemas import (
+    CategoryCreate,
+    CategoryUpdate,
+    CategoryResponse,
+    PriceBreakdown,
+    PriceCalculateRequest,
 )
 from app.services.price_service import PriceCalculator
 
@@ -96,8 +105,7 @@ async def create_campaign(
         margin_rate=data.margin_rate,
     )
 
-    # 3. Create SupplierOffer with placeholder request_id
-    # Reverse DW will replace with real legacy ProductRequest ID
+    # 3. Create SupplierOffer
     placeholder_request_id = uuid_mod.uuid4()
     offer = SupplierOffer(
         request_id=placeholder_request_id,
@@ -136,15 +144,6 @@ async def create_campaign(
         created_by=admin.id,
     )
     db.add(campaign)
-    await db.flush()
-
-    # Reverse dual-write: create legacy ProductRequest
-    try:
-        from app.services.reverse_dual_write import ReverseDualWrite
-        rdw = ReverseDualWrite(db)
-        await rdw.shadow_create_campaign(campaign, product, offer, admin.id)
-    except Exception:
-        pass
 
     await db.commit()
     await db.refresh(campaign)
@@ -192,14 +191,6 @@ async def publish_campaign(
         reason="admin_publish",
         changed_by=admin.id,
     ))
-
-    # Reverse dual-write: legacy publish
-    try:
-        from app.services.reverse_dual_write import ReverseDualWrite
-        rdw = ReverseDualWrite(db)
-        await rdw.shadow_publish_campaign(campaign)
-    except Exception:
-        pass
 
     await db.commit()
 
@@ -422,14 +413,6 @@ async def update_campaign(
                 offer.usd_rate_used = float(price.usd_rate)
                 offer.selling_price_try = float(price.selling_price_try)
 
-    # Reverse dual-write
-    try:
-        from app.services.reverse_dual_write import ReverseDualWrite
-        rdw = ReverseDualWrite(db)
-        await rdw.shadow_update_campaign(campaign, product)
-    except Exception:
-        pass
-
     await db.commit()
     await db.refresh(campaign)
     await db.refresh(product)
@@ -479,13 +462,6 @@ async def bulk_publish_campaigns(
             changed_by=admin.id,
         ))
 
-        try:
-            from app.services.reverse_dual_write import ReverseDualWrite
-            rdw = ReverseDualWrite(db)
-            await rdw.shadow_publish_campaign(campaign)
-        except Exception:
-            pass
-
         published.append(str(cid))
 
     await db.commit()
@@ -527,13 +503,6 @@ async def bulk_cancel_campaigns(
             reason="bulk_cancel",
             changed_by=admin.id,
         ))
-
-        try:
-            from app.services.reverse_dual_write import ReverseDualWrite
-            rdw = ReverseDualWrite(db)
-            await rdw.shadow_campaign_status(campaign, "cancelled")
-        except Exception:
-            pass
 
         cancelled.append(str(cid))
 
@@ -585,3 +554,125 @@ async def update_suggestion(
     await db.commit()
     await db.refresh(suggestion)
     return suggestion
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# CATEGORY MANAGEMENT (moved from v1 admin)
+# ══════════════════════════════════════════════════════════════════════════
+
+@router.get("/categories", response_model=List[CategoryResponse])
+async def list_categories(
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all categories."""
+    result = await db.execute(
+        select(Category).order_by(Category.sort_order, Category.name)
+    )
+    return result.scalars().all()
+
+
+@router.post("/categories", response_model=CategoryResponse, status_code=201)
+async def create_category(
+    data: CategoryCreate,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a new category."""
+    category = Category(
+        name=data.name,
+        slug=data.slug,
+        parent_id=data.parent_id,
+        gumruk_rate=data.gumruk_rate,
+        is_restricted=data.is_restricted,
+        icon=data.icon,
+        sort_order=data.sort_order,
+    )
+    db.add(category)
+    try:
+        await db.commit()
+    except SQLIntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="Bu slug zaten kullanılıyor.")
+    await db.refresh(category)
+    return category
+
+
+@router.patch("/categories/{category_id}", response_model=CategoryResponse)
+async def update_category(
+    category_id: UUID,
+    data: CategoryUpdate,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update a category."""
+    result = await db.execute(
+        select(Category).where(Category.id == category_id)
+    )
+    category = result.scalar_one_or_none()
+    if not category:
+        raise HTTPException(status_code=404, detail="Category not found")
+
+    if data.name is not None:
+        category.name = data.name
+    if data.slug is not None:
+        category.slug = data.slug
+    if data.parent_id is not None:
+        category.parent_id = data.parent_id
+    if data.gumruk_rate is not None:
+        category.gumruk_rate = data.gumruk_rate
+    if data.is_restricted is not None:
+        category.is_restricted = data.is_restricted
+    if data.icon is not None:
+        category.icon = data.icon
+    if data.sort_order is not None:
+        category.sort_order = data.sort_order
+
+    await db.commit()
+    await db.refresh(category)
+    return category
+
+
+@router.delete("/categories/{category_id}", status_code=204)
+async def delete_category(
+    category_id: UUID,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a category."""
+    result = await db.execute(
+        select(Category).where(Category.id == category_id)
+    )
+    category = result.scalar_one_or_none()
+    if not category:
+        raise HTTPException(status_code=404, detail="Category not found")
+
+    try:
+        await db.delete(category)
+        await db.commit()
+    except SQLIntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Bu kategoriye atanmış ürünler var. Önce ürünleri taşıyın."
+        )
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# PRICE PREVIEW
+# ══════════════════════════════════════════════════════════════════════════
+
+@router.post("/calculate-price", response_model=PriceBreakdown)
+async def calculate_price_preview(
+    data: PriceCalculateRequest,
+    admin: User = Depends(require_admin),
+):
+    """Price calculation preview."""
+    calculator = PriceCalculator()
+    return await calculator.calculate_selling_price(
+        unit_price_usd=data.unit_price_usd,
+        moq=data.moq,
+        shipping_cost_usd=data.shipping_cost_usd,
+        customs_rate=data.customs_rate,
+        margin_rate=data.margin_rate,
+    )

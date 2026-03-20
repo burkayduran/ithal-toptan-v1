@@ -15,7 +15,7 @@ from app.core.auth import get_current_active_user
 from app.core.limiter import limiter
 from app.db.session import get_db
 from app.models.models import (
-    Campaign, CampaignParticipant, Product, User, WishlistEntry,
+    Campaign, CampaignParticipant, Product, User,
 )
 from app.schemas.v2_schemas import (
     CampaignProgress,
@@ -416,14 +416,6 @@ async def join_campaign(
         db.add(participant)
         await db.flush()
 
-    # Reverse dual-write: shadow to legacy WishlistEntry
-    try:
-        from app.services.reverse_dual_write import ReverseDualWrite
-        rdw = ReverseDualWrite(db)
-        await rdw.shadow_join_campaign(participant, campaign)
-    except Exception:
-        pass
-
     await db.commit()
     await db.refresh(participant)
 
@@ -483,25 +475,6 @@ async def leave_campaign(
             status_code=400,
             detail="Cannot leave campaign at this stage",
         )
-
-    # Get campaign for reverse DW
-    campaign_result = await db.execute(
-        select(Campaign).where(Campaign.id == campaign_id)
-    )
-    campaign = campaign_result.scalar_one_or_none()
-
-    # Delete legacy WishlistEntry if exists
-    if campaign and participant.legacy_entry_id:
-        try:
-            from app.services.reverse_dual_write import ReverseDualWrite
-            legacy_entry_result = await db.execute(
-                select(WishlistEntry).where(WishlistEntry.id == participant.legacy_entry_id)
-            )
-            legacy_entry = legacy_entry_result.scalar_one_or_none()
-            if legacy_entry and legacy_entry.status in ("waiting", "expired"):
-                await db.delete(legacy_entry)
-        except Exception:
-            pass
 
     await db.delete(participant)
     await db.commit()

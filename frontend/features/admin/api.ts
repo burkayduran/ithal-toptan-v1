@@ -12,7 +12,6 @@ import type {
   PricePreviewPayload,
 } from "./types";
 
-const ADMIN = "/api/admin";
 const ADMIN_V2 = "/api/v2/admin";
 
 // ── Campaigns (V2) ───────────────────────────────────────────────────────
@@ -54,25 +53,25 @@ export function updateAdminCampaign(
   return api.patch(`${ADMIN_V2}/campaigns/${id}`, payload);
 }
 
-// ── Categories (unchanged — shared table) ─────────────────────────────────
+// ── Categories (V2) ─────────────────────────────────────────────────────────
 
 export function getAdminCategories(): Promise<AdminCategory[]> {
-  return api.get(`${ADMIN}/categories`);
+  return api.get(`${ADMIN_V2}/categories`);
 }
 
 export function createAdminCategory(payload: CategoryCreatePayload): Promise<AdminCategory> {
-  return api.post(`${ADMIN}/categories`, payload);
+  return api.post(`${ADMIN_V2}/categories`, payload);
 }
 
 export function updateAdminCategory(
   id: string,
   payload: CategoryUpdatePayload
 ): Promise<AdminCategory> {
-  return api.patch(`${ADMIN}/categories/${id}`, payload);
+  return api.patch(`${ADMIN_V2}/categories/${id}`, payload);
 }
 
 export function deleteAdminCategory(id: string): Promise<void> {
-  return api.delete(`${ADMIN}/categories/${id}`);
+  return api.delete(`${ADMIN_V2}/categories/${id}`);
 }
 
 // ── Suggestions (V2) ─────────────────────────────────────────────────────
@@ -90,10 +89,10 @@ export function updateAdminSuggestion(
   return api.patch(`${ADMIN_V2}/suggestions/${id}`, payload);
 }
 
-// ── Price Preview (unchanged — shared endpoint) ──────────────────────────
+// ── Price Preview (V2) ──────────────────────────────────────────────────────
 
 export function calculatePricePreview(payload: PricePreviewPayload): Promise<PriceBreakdown> {
-  return api.post(`${ADMIN}/calculate-price`, {
+  return api.post(`${ADMIN_V2}/calculate-price`, {
     unit_price_usd: payload.unit_price_usd,
     moq: payload.moq,
     shipping_cost_usd: payload.shipping_cost_usd ?? 0,
