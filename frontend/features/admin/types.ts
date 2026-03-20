@@ -19,6 +19,7 @@ export interface AdminCampaign {
   selected_offer_id: string | null;
   supplier_name_snapshot: string | null;
   supplier_country_snapshot: string | null;
+  alibaba_product_url_snapshot: string | null;
   unit_price_usd_snapshot: number | null;
   shipping_cost_usd_snapshot: number | null;
   customs_rate_snapshot: number | null;

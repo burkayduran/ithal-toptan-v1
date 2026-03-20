@@ -168,6 +168,7 @@ async def backfill_products_and_campaigns(
             # Snapshot alanları
             supplier_name_snapshot=offer.supplier_name if offer else None,
             supplier_country_snapshot=offer.supplier_country if offer else None,
+            alibaba_product_url_snapshot=offer.alibaba_product_url if offer else None,
             unit_price_usd_snapshot=float(offer.unit_price_usd) if offer and offer.unit_price_usd else None,
             shipping_cost_usd_snapshot=float(offer.shipping_cost_usd) if offer and offer.shipping_cost_usd else None,
             customs_rate_snapshot=float(offer.customs_rate) if offer and offer.customs_rate else None,

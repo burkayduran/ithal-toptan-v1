@@ -56,17 +56,19 @@ function EditForm({
     category_id: campaign.category_id ?? "",
     images: (campaign.images ?? []).join("\n"),
     status: campaign.status,
-    // Supplier fields
-    supplier_name: campaign.supplier_name ?? "",
-    supplier_country: campaign.supplier_country ?? "CN",
-    alibaba_product_url: campaign.alibaba_product_url ?? "",
+    // Supplier fields — read from _snapshot fields
+    supplier_name: campaign.supplier_name_snapshot ?? "",
+    supplier_country: campaign.supplier_country_snapshot ?? "CN",
+    alibaba_product_url: campaign.alibaba_product_url_snapshot ?? "",
     lead_time_days: campaign.lead_time_days?.toString() ?? "",
-    // Pricing fields (as percentages for display)
-    unit_price_usd: campaign.unit_price_usd?.toString() ?? "",
+    // Pricing fields — read from _snapshot fields, convert to display percentages
+    unit_price_usd: campaign.unit_price_usd_snapshot?.toString() ?? "",
     moq: campaign.moq?.toString() ?? "",
-    shipping_cost_usd: campaign.shipping_cost_usd?.toString() ?? "",
-    customs_rate: campaign.customs_rate != null ? (campaign.customs_rate * 100).toFixed(0) : "35",
-    margin_rate: campaign.margin_rate != null ? (campaign.margin_rate * 100).toFixed(0) : "30",
+    shipping_cost_usd: campaign.shipping_cost_usd_snapshot?.toString() ?? "",
+    customs_rate: campaign.customs_rate_snapshot != null
+      ? (campaign.customs_rate_snapshot * 100).toFixed(0) : "35",
+    margin_rate: campaign.margin_rate_snapshot != null
+      ? (campaign.margin_rate_snapshot * 100).toFixed(0) : "30",
   });
 
   const isLocked = ["moq_reached", "payment_collecting", "ordered"].includes(campaign.status);

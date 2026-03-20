@@ -347,6 +347,7 @@ class Campaign(Base):
     # Tedarikçi snapshot
     supplier_name_snapshot: Mapped[Optional[str]] = mapped_column(String(255))
     supplier_country_snapshot: Mapped[Optional[str]] = mapped_column(String(10))
+    alibaba_product_url_snapshot: Mapped[Optional[str]] = mapped_column(Text)
 
     # Fiyat snapshot
     unit_price_usd_snapshot: Mapped[Optional[float]] = mapped_column(Numeric(10, 2))

@@ -20,6 +20,7 @@ from app.models.models import (
 from app.schemas.v2_schemas import (
     AdminCampaignDetailResponse,
     CampaignCreatePayload,
+    CampaignUpdatePayload,
     CampaignResponse,
     SuggestionResponse,
     SuggestionUpdatePayload,
@@ -123,6 +124,7 @@ async def create_campaign(
         status="draft",
         supplier_name_snapshot=data.supplier_name,
         supplier_country_snapshot=data.supplier_country,
+        alibaba_product_url_snapshot=data.alibaba_product_url,
         unit_price_usd_snapshot=data.unit_price_usd,
         shipping_cost_usd_snapshot=data.shipping_cost_usd,
         customs_rate_snapshot=data.customs_rate,
@@ -241,13 +243,8 @@ async def list_all_campaigns(
     ]
 
 
-@router.get("/campaigns/{campaign_id}", response_model=AdminCampaignDetailResponse)
-async def get_campaign_detail(
-    campaign_id: UUID,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
-):
-    """Admin gets full campaign detail with snapshot fields."""
+async def _get_detail_response(campaign_id: UUID, db: AsyncSession) -> AdminCampaignDetailResponse:
+    """Shared helper for returning full campaign detail."""
     result = await db.execute(
         select(Campaign, Product)
         .join(Product, Campaign.product_id == Product.id)
@@ -259,7 +256,6 @@ async def get_campaign_detail(
 
     campaign, product = row
 
-    # Participant count
     count_result = await db.execute(
         select(func.coalesce(func.sum(CampaignParticipant.quantity), 0))
         .where(
@@ -291,10 +287,10 @@ async def get_campaign_detail(
         lead_time_days=campaign.lead_time_days,
         current_participant_count=participant_count,
         moq_fill_percentage=round(participant_count / moq * 100, 1) if moq else None,
-        # Snapshot fields
         selected_offer_id=campaign.selected_offer_id,
         supplier_name_snapshot=campaign.supplier_name_snapshot,
         supplier_country_snapshot=campaign.supplier_country_snapshot,
+        alibaba_product_url_snapshot=campaign.alibaba_product_url_snapshot,
         unit_price_usd_snapshot=float(campaign.unit_price_usd_snapshot) if campaign.unit_price_usd_snapshot else None,
         shipping_cost_usd_snapshot=float(campaign.shipping_cost_usd_snapshot) if campaign.shipping_cost_usd_snapshot else None,
         customs_rate_snapshot=float(campaign.customs_rate_snapshot) if campaign.customs_rate_snapshot else None,
@@ -305,6 +301,244 @@ async def get_campaign_detail(
         ordered_at=campaign.ordered_at,
         delivered_at=campaign.delivered_at,
     )
+
+
+@router.get("/campaigns/{campaign_id}", response_model=AdminCampaignDetailResponse)
+async def get_campaign_detail(
+    campaign_id: UUID,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin gets full campaign detail with snapshot fields."""
+    return await _get_detail_response(campaign_id, db)
+
+
+@router.patch("/campaigns/{campaign_id}", response_model=AdminCampaignDetailResponse)
+async def update_campaign(
+    campaign_id: UUID,
+    data: CampaignUpdatePayload,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin updates a campaign — pricing/supplier changes only in draft/active."""
+    result = await db.execute(
+        select(Campaign, Product)
+        .join(Product, Campaign.product_id == Product.id)
+        .where(Campaign.id == campaign_id)
+    )
+    row = result.one_or_none()
+    if not row:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    campaign, product = row
+
+    # Lock pricing fields if payment phase started
+    LOCKED_STATUSES = {"moq_reached", "payment_collecting", "ordered"}
+    PRICING_FIELDS = [
+        "unit_price_usd", "moq", "shipping_cost_usd", "customs_rate",
+        "margin_rate", "supplier_name", "supplier_country", "alibaba_product_url",
+    ]
+    if campaign.status in LOCKED_STATUSES:
+        for field_name in PRICING_FIELDS:
+            if getattr(data, field_name, None) is not None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Ödeme süreci başlamış kampanyalarda fiyat ve tedarikçi bilgileri değiştirilemez.",
+                )
+
+    # Track if pricing changed for recalculation
+    pricing_changed = False
+
+    # Update product fields (title, description, category, images)
+    if data.title is not None:
+        product.title = data.title
+    if data.description is not None:
+        product.description = data.description
+    if data.category_id is not None:
+        product.category_id = data.category_id
+    if data.images is not None:
+        product.images = data.images
+
+    # Update supplier/pricing snapshot fields
+    if data.supplier_name is not None:
+        campaign.supplier_name_snapshot = data.supplier_name
+    if data.supplier_country is not None:
+        campaign.supplier_country_snapshot = data.supplier_country
+    if data.alibaba_product_url is not None:
+        campaign.alibaba_product_url_snapshot = data.alibaba_product_url
+
+    if data.unit_price_usd is not None:
+        campaign.unit_price_usd_snapshot = data.unit_price_usd
+        pricing_changed = True
+    if data.moq is not None:
+        campaign.moq = data.moq
+        pricing_changed = True
+    if data.shipping_cost_usd is not None:
+        campaign.shipping_cost_usd_snapshot = data.shipping_cost_usd
+        pricing_changed = True
+    if data.customs_rate is not None:
+        campaign.customs_rate_snapshot = data.customs_rate
+        pricing_changed = True
+    if data.margin_rate is not None:
+        campaign.margin_rate_snapshot = data.margin_rate
+        pricing_changed = True
+    if data.lead_time_days is not None:
+        campaign.lead_time_days = data.lead_time_days
+
+    # Recalculate selling price if pricing inputs changed
+    if pricing_changed:
+        calculator = PriceCalculator()
+        price = await calculator.calculate_selling_price(
+            unit_price_usd=float(campaign.unit_price_usd_snapshot or 0),
+            moq=int(campaign.moq or 1),
+            shipping_cost_usd=float(campaign.shipping_cost_usd_snapshot or 0),
+            customs_rate=float(campaign.customs_rate_snapshot or 0.35),
+            margin_rate=float(campaign.margin_rate_snapshot or 0.30),
+        )
+        campaign.fx_rate_snapshot = float(price.usd_rate)
+        campaign.selling_price_try_snapshot = float(price.selling_price_try)
+
+        # Also update the linked SupplierOffer
+        if campaign.selected_offer_id:
+            offer_result = await db.execute(
+                select(SupplierOffer).where(SupplierOffer.id == campaign.selected_offer_id)
+            )
+            offer = offer_result.scalar_one_or_none()
+            if offer:
+                if data.unit_price_usd is not None:
+                    offer.unit_price_usd = data.unit_price_usd
+                if data.moq is not None:
+                    offer.moq = data.moq
+                if data.shipping_cost_usd is not None:
+                    offer.shipping_cost_usd = data.shipping_cost_usd
+                if data.customs_rate is not None:
+                    offer.customs_rate = data.customs_rate
+                if data.margin_rate is not None:
+                    offer.margin_rate = data.margin_rate
+                if data.supplier_name is not None:
+                    offer.supplier_name = data.supplier_name
+                if data.supplier_country is not None:
+                    offer.supplier_country = data.supplier_country
+                offer.usd_rate_used = float(price.usd_rate)
+                offer.selling_price_try = float(price.selling_price_try)
+
+    # Reverse dual-write
+    try:
+        from app.services.reverse_dual_write import ReverseDualWrite
+        rdw = ReverseDualWrite(db)
+        await rdw.shadow_update_campaign(campaign, product)
+    except Exception:
+        pass
+
+    await db.commit()
+    await db.refresh(campaign)
+    await db.refresh(product)
+
+    return await _get_detail_response(campaign_id, db)
+
+
+# ── Bulk Operations ──────────────────────────────────────────────────────
+
+@router.post("/campaigns/bulk-publish")
+async def bulk_publish_campaigns(
+    campaign_ids: List[UUID],
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Bulk publish draft campaigns."""
+    published = []
+    failed = []
+
+    for cid in campaign_ids:
+        result = await db.execute(
+            select(Campaign).where(Campaign.id == cid)
+        )
+        campaign = result.scalar_one_or_none()
+
+        if not campaign:
+            failed.append({"id": str(cid), "reason": "Kampanya bulunamadı"})
+            continue
+
+        if campaign.status != "draft":
+            failed.append({"id": str(cid), "reason": f"Durum zaten '{campaign.status}'"})
+            continue
+
+        if not campaign.selling_price_try_snapshot or not campaign.moq:
+            failed.append({"id": str(cid), "reason": "Fiyat veya MOQ eksik"})
+            continue
+
+        old_status = campaign.status
+        campaign.status = "active"
+        campaign.activated_at = datetime.now(timezone.utc)
+
+        db.add(CampaignStatusHistory(
+            campaign_id=campaign.id,
+            old_status=old_status,
+            new_status="active",
+            reason="bulk_publish",
+            changed_by=admin.id,
+        ))
+
+        try:
+            from app.services.reverse_dual_write import ReverseDualWrite
+            rdw = ReverseDualWrite(db)
+            await rdw.shadow_publish_campaign(campaign)
+        except Exception:
+            pass
+
+        published.append(str(cid))
+
+    await db.commit()
+    return {"published": published, "failed": failed}
+
+
+@router.post("/campaigns/bulk-cancel")
+async def bulk_cancel_campaigns(
+    campaign_ids: List[UUID],
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Bulk cancel campaigns."""
+    cancelled = []
+    failed = []
+
+    for cid in campaign_ids:
+        result = await db.execute(
+            select(Campaign).where(Campaign.id == cid)
+        )
+        campaign = result.scalar_one_or_none()
+
+        if not campaign:
+            failed.append({"id": str(cid), "reason": "Kampanya bulunamadı"})
+            continue
+
+        if campaign.status in ("ordered", "delivered"):
+            failed.append({"id": str(cid), "reason": f"'{campaign.status}' durumundaki kampanya iptal edilemez"})
+            continue
+
+        old_status = campaign.status
+        campaign.status = "cancelled"
+        campaign.cancelled_at = datetime.now(timezone.utc)
+
+        db.add(CampaignStatusHistory(
+            campaign_id=campaign.id,
+            old_status=old_status,
+            new_status="cancelled",
+            reason="bulk_cancel",
+            changed_by=admin.id,
+        ))
+
+        try:
+            from app.services.reverse_dual_write import ReverseDualWrite
+            rdw = ReverseDualWrite(db)
+            await rdw.shadow_campaign_status(campaign, "cancelled")
+        except Exception:
+            pass
+
+        cancelled.append(str(cid))
+
+    await db.commit()
+    return {"cancelled": cancelled, "failed": failed}
 
 
 # ══════════════════════════════════════════════════════════════════════════

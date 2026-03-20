@@ -33,25 +33,25 @@ export function publishAdminCampaign(id: string): Promise<{ message: string; id:
   return api.post(`${ADMIN_V2}/campaigns/${id}/publish`);
 }
 
-// Bulk operations still go through V1 admin (not yet in V2)
+// Bulk operations — V2
 export function bulkPublishCampaigns(
-  product_ids: string[]
+  campaign_ids: string[]
 ): Promise<{ published: string[]; failed: { id: string; reason: string }[] }> {
-  return api.post(`${ADMIN}/products/bulk-publish`, product_ids);
+  return api.post(`${ADMIN_V2}/campaigns/bulk-publish`, campaign_ids);
 }
 
 export function bulkCancelCampaigns(
-  product_ids: string[]
+  campaign_ids: string[]
 ): Promise<{ cancelled: string[]; failed: { id: string; reason: string }[] }> {
-  return api.post(`${ADMIN}/products/bulk-cancel`, product_ids);
+  return api.post(`${ADMIN_V2}/campaigns/bulk-cancel`, campaign_ids);
 }
 
-// Update still goes through V1 admin (not yet in V2)
+// Update — V2
 export function updateAdminCampaign(
   id: string,
   payload: CampaignUpdatePayload
 ): Promise<AdminCampaign> {
-  return api.patch(`${ADMIN}/products/${id}`, payload);
+  return api.patch(`${ADMIN_V2}/campaigns/${id}`, payload);
 }
 
 // ── Categories (unchanged — shared table) ─────────────────────────────────

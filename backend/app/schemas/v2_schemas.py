@@ -58,6 +58,7 @@ class AdminCampaignDetailResponse(CampaignResponse):
     selected_offer_id: Optional[UUID] = None
     supplier_name_snapshot: Optional[str] = None
     supplier_country_snapshot: Optional[str] = None
+    alibaba_product_url_snapshot: Optional[str] = None
     unit_price_usd_snapshot: Optional[float] = None
     shipping_cost_usd_snapshot: Optional[float] = None
     customs_rate_snapshot: Optional[float] = None
