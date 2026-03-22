@@ -390,8 +390,26 @@ async def join_campaign(
     selling_price = float(campaign.selling_price_try_snapshot) if campaign.selling_price_try_snapshot else None
 
     if participant:
-        # Update quantity
+        # Immutable states — cannot change quantity once paid/cancelled
+        if participant.status in ("paid", "cancelled"):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Katılım durumu '{participant.status}' iken miktar değiştirilemez.",
+            )
+
+        # Update quantity and recalculate snapshots
         participant.quantity = data.quantity
+        participant.unit_price_try_snapshot = selling_price
+        participant.total_amount_try_snapshot = (
+            round(data.quantity * selling_price, 2) if selling_price else None
+        )
+
+        # If campaign is in moq_reached state and participant joined late or updated,
+        # ensure invited state metadata is current
+        if campaign.status == "moq_reached" and participant.status == "joined":
+            participant.status = "invited"
+            participant.invited_at = campaign.moq_reached_at
+            participant.payment_deadline = campaign.payment_deadline
     else:
         # Determine initial status
         if campaign.status == "moq_reached":

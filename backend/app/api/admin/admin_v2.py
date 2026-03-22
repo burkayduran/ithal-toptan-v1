@@ -364,20 +364,32 @@ async def update_campaign(
     if data.images is not None:
         product.images = data.images
 
-    # ── Status değişikliği ──────────────────────────────────────────────
+    # ── Status değişikliği — explicit allowed transitions ──────────────
     if data.status is not None and data.status != campaign.status:
         old_status = campaign.status
         new_status = data.status
 
-        # İş kuralları: hangi geçişler yasak?
-        FORBIDDEN_REVERSE = {
-            ("ordered", "active"), ("ordered", "draft"),
-            ("delivered", "active"), ("delivered", "draft"), ("delivered", "ordered"),
+        ALLOWED_TRANSITIONS: dict[str, set[str]] = {
+            "draft":              {"active", "cancelled"},
+            "active":             {"moq_reached", "cancelled", "failed"},
+            "moq_reached":        {"payment_collecting", "cancelled", "failed"},
+            "payment_collecting": {"ordered", "cancelled", "failed"},
+            "ordered":            {"shipped", "cancelled"},
+            "shipped":            {"delivered"},
+            # terminal states — no outgoing transitions
+            "delivered":          set(),
+            "cancelled":          set(),
+            "failed":             set(),
         }
-        if (old_status, new_status) in FORBIDDEN_REVERSE:
+
+        allowed = ALLOWED_TRANSITIONS.get(old_status, set())
+        if new_status not in allowed:
             raise HTTPException(
                 status_code=400,
-                detail=f"'{old_status}' → '{new_status}' geçişi yapılamaz.",
+                detail=(
+                    f"'{old_status}' → '{new_status}' geçişi yapılamaz. "
+                    f"İzin verilen: {sorted(allowed) if allowed else 'yok (terminal durum)'}."
+                ),
             )
 
         campaign.status = new_status

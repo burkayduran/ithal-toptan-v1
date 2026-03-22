@@ -190,11 +190,11 @@ return val
                 Notification(
                     user_id=participant.user_id,
                     campaign_id=campaign_id,
-                    request_id=campaign.legacy_request_id,
                     type="moq_reached",
                     channel="email",
                     subject="Sipariş hazır! 48 saat içinde ödeme yapın",
-                    status="pending"
+                    status="pending",
+                    # sent_at stays NULL until email actually sent by Celery task
                 )
             )
 

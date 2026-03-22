@@ -213,24 +213,28 @@ class BatchOrder(Base):
 class Notification(Base):
     __tablename__ = "notifications"
     __table_args__ = (
+        # Legacy constraint kept for existing data
         UniqueConstraint("user_id", "request_id", "type", name="uq_notification_user_request_type"),
+        # Primary dedupe constraint for v2 flow
         UniqueConstraint("user_id", "campaign_id", "type", name="uq_notification_user_campaign_type"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
-    request_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True))
+    request_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True))  # legacy fallback only
     campaign_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("campaigns.id"))
 
     # Type: moq_reached, payment_reminder, order_confirmed, shipped, delivered
     type: Mapped[str] = mapped_column(String(50), nullable=False)
     channel: Mapped[str] = mapped_column(String(20), default="email")  # email, sms, push
     subject: Mapped[Optional[str]] = mapped_column(String(255))
-    
+
     # Status: pending, sent, delivered, opened, clicked, failed
     status: Mapped[str] = mapped_column(String(20), default="pending")
-    
-    sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    # sent_at: NULL until actually sent; set only when email dispatch succeeds
+    sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     opened_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
 

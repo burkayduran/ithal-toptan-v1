@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 CampaignStatus = Literal[
     "draft", "active", "moq_reached", "payment_collecting",
-    "ordered", "delivered", "cancelled",
+    "ordered", "shipped", "delivered", "cancelled", "failed",
 ]
 SuggestionStatus = Literal["pending", "reviewing", "approved", "rejected"]
 ParticipantStatus = Literal["joined", "invited", "paid", "expired", "cancelled"]

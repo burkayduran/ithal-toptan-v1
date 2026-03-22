@@ -51,8 +51,13 @@ async def _participant_to_response(
 
     title = campaign.title_override or product.title
     images = campaign.images_override or product.images or []
-    selling_price = float(campaign.selling_price_try_snapshot) if campaign.selling_price_try_snapshot else 0.0
-    total_amount = round(participant.quantity * selling_price, 2)
+
+    # Prefer participant snapshot (price at join time) over campaign current price
+    if participant.total_amount_try_snapshot is not None:
+        total_amount = float(participant.total_amount_try_snapshot)
+    else:
+        selling_price = float(campaign.selling_price_try_snapshot) if campaign.selling_price_try_snapshot else 0.0
+        total_amount = round(participant.quantity * selling_price, 2)
 
     return PaymentEntryV2Response(
         id=participant.id,
@@ -139,8 +144,16 @@ async def confirm_payment(
             detail=f"Bu kampanya şu an ödeme kabul etmiyor (durum: '{campaign.status}').",
         )
 
-    selling_price = float(campaign.selling_price_try_snapshot) if campaign.selling_price_try_snapshot else 0.0
-    amount_try = round(participant.quantity * selling_price, 2)
+    # Use participant snapshot price (frozen at join time), fallback to campaign current
+    if participant.unit_price_try_snapshot is not None:
+        selling_price = float(participant.unit_price_try_snapshot)
+    else:
+        selling_price = float(campaign.selling_price_try_snapshot) if campaign.selling_price_try_snapshot else 0.0
+
+    if participant.total_amount_try_snapshot is not None:
+        amount_try = float(participant.total_amount_try_snapshot)
+    else:
+        amount_try = round(participant.quantity * selling_price, 2)
 
     # Update participant status
     old_status = participant.status

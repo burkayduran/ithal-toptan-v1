@@ -78,6 +78,8 @@ async def _send_moq_reached_email_async(campaign_id: str, deadline: str):
 
         logger.info("Sending MoQ reached emails to %d users", len(entries))
 
+        now = datetime.now(timezone.utc)
+
         # Send emails
         for participant, user in entries:
             email_data = {
@@ -111,11 +113,12 @@ async def _send_moq_reached_email_async(campaign_id: str, deadline: str):
             else:
                 notif_status = "sent"
 
+            # Lookup pending notification by campaign_id (primary key)
             notif_result = await db.execute(
                 select(Notification).where(
                     and_(
                         Notification.user_id == user.id,
-                        Notification.request_id == campaign.legacy_request_id,
+                        Notification.campaign_id == campaign_uuid,
                         Notification.type == "moq_reached",
                         Notification.status == "pending"
                     )
@@ -125,6 +128,9 @@ async def _send_moq_reached_email_async(campaign_id: str, deadline: str):
 
             if notification:
                 notification.status = notif_status
+                # sent_at only set when actually sent
+                if notif_status == "sent":
+                    notification.sent_at = now
 
         await db.commit()
         logger.info("Sent %d MoQ reached emails", len(entries))
@@ -182,15 +188,15 @@ async def _send_payment_reminders_async():
             title = campaign.title_override or product.title
             selling_price = float(campaign.selling_price_try_snapshot) if campaign.selling_price_try_snapshot else 0
 
-            # Check if reminder already sent
+            # Check if reminder already sent recently — dedupe by campaign_id
             notif_result = await db.execute(
                 select(Notification).where(
                     and_(
                         Notification.user_id == user.id,
-                        Notification.request_id == campaign.legacy_request_id,
+                        Notification.campaign_id == campaign.id,
                         Notification.type == "payment_reminder",
                         Notification.status.in_(["pending", "sent"]),
-                        Notification.sent_at >= now - timedelta(hours=24),
+                        Notification.created_at >= now - timedelta(hours=24),
                     )
                 )
             )
@@ -226,13 +232,15 @@ async def _send_payment_reminders_async():
                 notif_status = "failed"
             else:
                 notif_status = "sent"
+
             notification = Notification(
                 user_id=user.id,
-                request_id=campaign.legacy_request_id,
+                campaign_id=campaign.id,
                 type="payment_reminder",
                 channel="email",
                 subject=f"Payment reminder for {title}",
                 status=notif_status,
+                sent_at=now if notif_status == "sent" else None,
             )
             db.add(notification)
 

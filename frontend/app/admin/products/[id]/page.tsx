@@ -36,6 +36,58 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
+const ALLOWED_TRANSITIONS: Record<string, string[]> = {
+  draft: ["active", "cancelled"],
+  active: ["moq_reached", "cancelled", "failed"],
+  moq_reached: ["payment_collecting", "cancelled", "failed"],
+  payment_collecting: ["ordered", "cancelled", "failed"],
+  ordered: ["shipped", "cancelled"],
+  shipped: ["delivered"],
+  delivered: [],
+  cancelled: [],
+  failed: [],
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  draft: "Taslak",
+  active: "Aktif",
+  moq_reached: "MOQ Doldu",
+  payment_collecting: "Ödeme Toplanıyor",
+  ordered: "Sipariş Verildi",
+  shipped: "Kargoda",
+  delivered: "Teslim Edildi",
+  cancelled: "İptal",
+  failed: "Başarısız",
+};
+
+function StatusSelect({
+  currentStatus,
+  value,
+  onChange,
+}: {
+  currentStatus: string;
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
+}) {
+  const allowed = ALLOWED_TRANSITIONS[currentStatus] ?? [];
+  // Show current + allowed targets
+  const options = [currentStatus, ...allowed.filter((s) => s !== currentStatus)];
+
+  return (
+    <select
+      value={value}
+      onChange={onChange}
+      className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none"
+    >
+      {options.map((s) => (
+        <option key={s} value={s}>
+          {STATUS_LABELS[s] ?? s}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 // Inner form — only rendered after campaign loads, so state initialises from props directly
 function EditForm({
   campaign,
@@ -202,19 +254,7 @@ function EditForm({
           />
         </Field>
         <Field label="Durum">
-          <select
-            value={form.status}
-            onChange={set("status")}
-            className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none"
-          >
-            <option value="draft">Taslak</option>
-            <option value="active">Aktif</option>
-            <option value="moq_reached">MOQ Doldu</option>
-            <option value="payment_collecting">Ödeme Toplanıyor</option>
-            <option value="ordered">Sipariş Verildi</option>
-            <option value="delivered">Teslim Edildi</option>
-            <option value="cancelled">İptal</option>
-          </select>
+          <StatusSelect currentStatus={campaign.status} value={form.status} onChange={set("status")} />
         </Field>
       </Section>
 
