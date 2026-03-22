@@ -390,8 +390,8 @@ async def join_campaign(
     selling_price = float(campaign.selling_price_try_snapshot) if campaign.selling_price_try_snapshot else None
 
     if participant:
-        # Immutable states — cannot change quantity once paid/cancelled
-        if participant.status in ("paid", "cancelled"):
+        # Immutable states — only "joined" allows quantity changes
+        if participant.status in ("paid", "cancelled", "invited", "expired"):
             raise HTTPException(
                 status_code=400,
                 detail=f"Katılım durumu '{participant.status}' iken miktar değiştirilemez.",

@@ -59,7 +59,7 @@ async def _send_moq_reached_email_async(campaign_id: str, deadline: str):
 
         campaign, product = row
         title = campaign.title_override or product.title
-        selling_price = float(campaign.selling_price_try_snapshot) if campaign.selling_price_try_snapshot else 0
+        campaign_price = float(campaign.selling_price_try_snapshot) if campaign.selling_price_try_snapshot else 0
 
         # Get invited participants with user info
         entries_result = await db.execute(
@@ -82,11 +82,18 @@ async def _send_moq_reached_email_async(campaign_id: str, deadline: str):
 
         # Send emails
         for participant, user in entries:
+            # Prefer participant snapshot (frozen at join time), fall back to campaign
+            unit_price = float(participant.unit_price_try_snapshot) if participant.unit_price_try_snapshot is not None else campaign_price
+            if participant.total_amount_try_snapshot is not None:
+                total_price = float(participant.total_amount_try_snapshot)
+            else:
+                total_price = round(unit_price * participant.quantity, 2)
+
             email_data = {
                 "product_title": title,
                 "quantity": participant.quantity,
-                "unit_price": selling_price,
-                "total_price": selling_price * participant.quantity,
+                "unit_price": unit_price,
+                "total_price": total_price,
                 "moq": campaign.moq,
                 "deadline": datetime.fromisoformat(deadline).strftime("%d.%m.%Y %H:%M"),
                 "lead_time_days": campaign.lead_time_days or 30,
@@ -186,7 +193,6 @@ async def _send_payment_reminders_async():
 
         for participant, user, campaign, product in entries:
             title = campaign.title_override or product.title
-            selling_price = float(campaign.selling_price_try_snapshot) if campaign.selling_price_try_snapshot else 0
 
             # Check if reminder already sent recently — dedupe by campaign_id
             notif_result = await db.execute(
@@ -206,9 +212,16 @@ async def _send_payment_reminders_async():
 
             hours_remaining = int((participant.payment_deadline - now).total_seconds() / 3600)
 
+            # Prefer participant snapshot, fall back to campaign
+            if participant.total_amount_try_snapshot is not None:
+                total_price = float(participant.total_amount_try_snapshot)
+            else:
+                campaign_price = float(campaign.selling_price_try_snapshot) if campaign.selling_price_try_snapshot else 0
+                total_price = round(campaign_price * participant.quantity, 2)
+
             email_data = {
                 "product_title": title,
-                "total_price": selling_price * participant.quantity,
+                "total_price": total_price,
                 "deadline": participant.payment_deadline.strftime("%d.%m.%Y %H:%M"),
                 "hours_remaining": hours_remaining,
                 "payment_url": f"{settings.FRONTEND_URL}/payment/{participant.id}"
@@ -281,12 +294,18 @@ async def _send_payment_success_email_async(participant_id: str):
 
         participant, user, campaign, product = row
         title = campaign.title_override or product.title
-        selling_price = float(campaign.selling_price_try_snapshot) if campaign.selling_price_try_snapshot else 0
+
+        # Prefer participant snapshot — matches the actual amount paid
+        if participant.total_amount_try_snapshot is not None:
+            total_price = float(participant.total_amount_try_snapshot)
+        else:
+            campaign_price = float(campaign.selling_price_try_snapshot) if campaign.selling_price_try_snapshot else 0
+            total_price = round(campaign_price * participant.quantity, 2)
 
         email_data = {
             "product_title": title,
             "quantity": participant.quantity,
-            "total_price": selling_price * participant.quantity,
+            "total_price": total_price,
             "order_id": str(campaign.id)[:8],
             "lead_time_days": campaign.lead_time_days or 30,
             "estimated_delivery": (datetime.now(timezone.utc) + timedelta(days=campaign.lead_time_days or 30)).strftime("%d.%m.%Y")

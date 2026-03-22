@@ -326,6 +326,80 @@ class TestParticipantSnapshotUpdate:
         assert resp.status_code == 400
         assert "paid" in resp.json()["detail"].lower() or "değiştirilemez" in resp.json()["detail"].lower()
 
+    async def test_invited_participant_cannot_change_quantity(
+        self, client: AsyncClient, db_session: AsyncSession,
+    ):
+        """Invited participants (payment phase) must not change quantity."""
+        email = f"snap4_{uuid.uuid4().hex[:8]}@test.com"
+        token = (await register_user(client, email, "SnapPass4!"))["access_token"]
+        user_id = await _get_user_id(client, token)
+
+        campaign, _, _ = await _create_campaign(db_session, status="active")
+
+        participant = CampaignParticipant(
+            campaign_id=campaign.id,
+            user_id=user_id,
+            quantity=2,
+            status="invited",
+            unit_price_try_snapshot=Decimal("500.00"),
+            total_amount_try_snapshot=Decimal("1000.00"),
+            invited_at=datetime.now(timezone.utc),
+            payment_deadline=datetime.now(timezone.utc) + timedelta(hours=48),
+        )
+        db_session.add(participant)
+        await db_session.commit()
+
+        with patch("app.api.v2.campaigns.MoQService") as MockMoQ:
+            instance = MockMoQ.return_value
+            instance.sync_counter_from_db = AsyncMock(return_value=2)
+            instance.check_and_trigger = AsyncMock(return_value={
+                "threshold_met": False, "transition_performed": False, "status_after": "active"
+            })
+
+            resp = await client.post(
+                f"/api/v2/campaigns/{campaign.id}/join",
+                json={"quantity": 5},
+                headers=auth_headers(token),
+            )
+        assert resp.status_code == 400
+        assert "invited" in resp.json()["detail"].lower() or "değiştirilemez" in resp.json()["detail"].lower()
+
+    async def test_expired_participant_cannot_change_quantity(
+        self, client: AsyncClient, db_session: AsyncSession,
+    ):
+        """Expired participants must not change quantity."""
+        email = f"snap5_{uuid.uuid4().hex[:8]}@test.com"
+        token = (await register_user(client, email, "SnapPass5!"))["access_token"]
+        user_id = await _get_user_id(client, token)
+
+        campaign, _, _ = await _create_campaign(db_session, status="active")
+
+        participant = CampaignParticipant(
+            campaign_id=campaign.id,
+            user_id=user_id,
+            quantity=2,
+            status="expired",
+            unit_price_try_snapshot=Decimal("500.00"),
+            total_amount_try_snapshot=Decimal("1000.00"),
+        )
+        db_session.add(participant)
+        await db_session.commit()
+
+        with patch("app.api.v2.campaigns.MoQService") as MockMoQ:
+            instance = MockMoQ.return_value
+            instance.sync_counter_from_db = AsyncMock(return_value=2)
+            instance.check_and_trigger = AsyncMock(return_value={
+                "threshold_met": False, "transition_performed": False, "status_after": "active"
+            })
+
+            resp = await client.post(
+                f"/api/v2/campaigns/{campaign.id}/join",
+                json={"quantity": 5},
+                headers=auth_headers(token),
+            )
+        assert resp.status_code == 400
+        assert "expired" in resp.json()["detail"].lower() or "değiştirilemez" in resp.json()["detail"].lower()
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # 3. Payment Uses Participant Snapshots

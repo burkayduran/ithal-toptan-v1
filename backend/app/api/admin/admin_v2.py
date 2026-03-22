@@ -552,7 +552,7 @@ async def bulk_cancel_campaigns(
             failed.append({"id": str(cid), "reason": "Kampanya bulunamadı"})
             continue
 
-        if campaign.status in ("ordered", "delivered"):
+        if campaign.status in ("ordered", "shipped", "delivered"):
             failed.append({"id": str(cid), "reason": f"'{campaign.status}' durumundaki kampanya iptal edilemez"})
             continue
 

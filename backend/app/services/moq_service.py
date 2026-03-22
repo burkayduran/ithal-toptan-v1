@@ -215,7 +215,7 @@ return val
         now = datetime.now(timezone.utc)
 
         # Transition campaign moq_reached → payment_collecting
-        await self.db.execute(
+        transition_result = await self.db.execute(
             update(Campaign)
             .where(
                 Campaign.id == campaign_id,
@@ -223,6 +223,14 @@ return val
             )
             .values(status="payment_collecting")
         )
+
+        if transition_result.rowcount > 0:
+            self.db.add(CampaignStatusHistory(
+                campaign_id=campaign_id,
+                old_status="moq_reached",
+                new_status="payment_collecting",
+                reason="Payment deadline reached, collecting payments",
+            ))
 
         # Expire unpaid participants
         await self.db.execute(
