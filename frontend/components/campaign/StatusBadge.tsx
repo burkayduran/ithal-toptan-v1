@@ -17,7 +17,7 @@ interface StatusMeta {
 
 const STATUS_META: Record<string, StatusMeta> = {
   // Campaign statuses
-  active:              { label: "Aktif",               className: "bg-green-100 text-green-800 border-green-200" },
+  active:              { label: "Aktif",               className: "bg-purple-100 text-purple-800 border-purple-200" },
   moq_reached:         { label: "Hedef Doldu",         className: "bg-blue-100 text-blue-800 border-blue-200" },
   payment_collecting:  { label: "Ödeme Toplanıyor",    className: "bg-amber-100 text-amber-800 border-amber-200" },
   ordered:             { label: "Sipariş Verildi",     className: "bg-purple-100 text-purple-800 border-purple-200" },
@@ -49,7 +49,7 @@ export default function StatusBadge({ status, className }: StatusBadgeProps) {
       )}
     >
       {status === "active" && (
-        <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-green-500 inline-block animate-pulse" />
+        <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-purple-500 inline-block animate-pulse" />
       )}
       {label}
     </span>

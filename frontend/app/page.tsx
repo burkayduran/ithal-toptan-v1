@@ -33,7 +33,7 @@ export default function HomePage() {
   return (
     <>
       {/* Hero */}
-      <section className="bg-gradient-to-br from-blue-600 to-blue-800 text-white">
+      <section className="bg-gradient-to-br from-purple-600 via-indigo-600 to-blue-700 text-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 lg:py-28">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div className="space-y-6">
@@ -46,14 +46,14 @@ export default function HomePage() {
                 <br />
                 <span className="text-yellow-300">Toptan Fiyatına</span> Alın
               </h1>
-              <p className="text-blue-100 text-lg leading-relaxed max-w-md">
+              <p className="text-indigo-100 text-lg leading-relaxed max-w-md">
                 Yeterli adet bekleme listesine eklendiğinde siparişiniz onaylanır.
                 Ödeme yalnızca MOQ dolduğunda alınır.
               </p>
               <a href="#campaigns">
                 <Button
                   size="lg"
-                  className="bg-white text-blue-700 hover:bg-blue-50 gap-2 font-semibold"
+                  className="bg-white text-purple-700 hover:bg-purple-50 gap-2 font-semibold"
                 >
                   Kampanyalara Göz At
                   <ArrowRight className="h-4 w-4" />
@@ -81,19 +81,19 @@ export default function HomePage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {[
               {
-                icon: <Package className="h-6 w-6 text-blue-600" />,
+                icon: <Package className="h-6 w-6 text-purple-600" />,
                 step: "1",
                 title: "Kampanyayı İnceleyin",
                 desc: "Ürün detaylarını, fiyatları ve tahmini teslimat tarihini inceleyin.",
               },
               {
-                icon: <ShoppingBag className="h-6 w-6 text-blue-600" />,
+                icon: <ShoppingBag className="h-6 w-6 text-purple-600" />,
                 step: "2",
                 title: "Bekleme Listesine Katılın",
                 desc: "İstediğiniz adedi seçerek bekleme listesine kaydolun.",
               },
               {
-                icon: <CreditCard className="h-6 w-6 text-blue-600" />,
+                icon: <CreditCard className="h-6 w-6 text-purple-600" />,
                 step: "3",
                 title: "MOQ Dolunca Ödeyin",
                 desc: "Hedef adede ulaşıldığında ödeme bildirimi gelir, siparişiniz onaylanır.",
@@ -101,11 +101,11 @@ export default function HomePage() {
             ].map((item) => (
               <div key={item.step} className="text-center space-y-3">
                 <div className="flex justify-center">
-                  <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
+                  <div className="w-12 h-12 rounded-full bg-purple-100 flex items-center justify-center">
                     {item.icon}
                   </div>
                 </div>
-                <div className="text-xs font-bold text-blue-600 uppercase tracking-widest">
+                <div className="text-xs font-bold text-purple-600 uppercase tracking-widest">
                   Adım {item.step}
                 </div>
                 <h3 className="font-semibold text-gray-900">{item.title}</h3>

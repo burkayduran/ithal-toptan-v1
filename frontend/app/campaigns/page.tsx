@@ -86,7 +86,7 @@ export default function CampaignsPage() {
                 className={cn(
                   "px-3 py-1 rounded-full text-xs font-medium border transition-colors",
                   statusFilter === opt.value
-                    ? "bg-blue-600 text-white border-blue-600"
+                    ? "bg-purple-600 text-white border-purple-600"
                     : "bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50"
                 )}
               >
@@ -100,7 +100,7 @@ export default function CampaignsPage() {
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as SortOption)}
-            className="text-xs border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 hover:border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="text-xs border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 hover:border-gray-300 focus:outline-none focus:ring-1 focus:ring-purple-500"
           >
             {SORT_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>

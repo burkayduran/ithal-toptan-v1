@@ -20,7 +20,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="tr">
-      <body className="font-sans antialiased bg-white text-gray-900 flex flex-col min-h-screen">
+      <body className="font-sans antialiased bg-gray-50 text-gray-900 flex flex-col min-h-screen">
         <QueryProvider>
           <AuthBootstrap />
           <Navbar />

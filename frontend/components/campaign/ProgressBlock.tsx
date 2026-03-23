@@ -1,6 +1,4 @@
-import { Progress } from "@/components/ui/progress";
-import { calculateProgress, calculateRemaining } from "@/lib/utils/calculateRemaining";
-import { Package } from "lucide-react";
+import { Users } from "lucide-react";
 
 interface ProgressBlockProps {
   currentCount: number;
@@ -8,26 +6,56 @@ interface ProgressBlockProps {
   compact?: boolean;
 }
 
+function getProgressGradient(percentage: number): string {
+  if (percentage >= 100) return "linear-gradient(90deg, #6EE7B7, #10B981, #059669)";
+  if (percentage >= 70) return "linear-gradient(90deg, #FBBF24, #F59E0B, #EA580C)";
+  return "linear-gradient(90deg, #C4B5FD, #8B5CF6, #7C3AED)";
+}
+
+function getRemainingColor(percentage: number): string {
+  if (percentage >= 100) return "text-emerald-600";
+  if (percentage >= 70) return "text-orange-600";
+  return "text-purple-600";
+}
+
 export default function ProgressBlock({ currentCount, targetCount, compact }: ProgressBlockProps) {
-  const progress = calculateProgress(currentCount, targetCount);
-  const remaining = calculateRemaining(currentCount, targetCount);
+  const percentage = targetCount > 0 ? Math.min(100, Math.round((currentCount / targetCount) * 100)) : 0;
+  const remaining = Math.max(0, targetCount - currentCount);
 
   return (
     <div className="space-y-1.5">
-      <div className="flex items-center justify-between text-sm">
-        <span className="flex items-center gap-1.5 font-medium text-gray-700">
-          <Package className="h-3.5 w-3.5 text-gray-400" />
-          {currentCount} / {targetCount} adet
+      {/* Gradient progress bar */}
+      <div className="w-full h-[5px] bg-gray-200 rounded-full overflow-hidden">
+        <div
+          className="h-full rounded-full transition-all duration-500 ease-out"
+          style={{
+            width: `${percentage}%`,
+            background: getProgressGradient(percentage),
+          }}
+        />
+      </div>
+
+      {/* Meta row */}
+      <div className="flex items-center justify-between">
+        <span className="flex items-center gap-1 text-xs text-gray-500">
+          <Users className="h-3.5 w-3.5" />
+          <span className="font-medium text-gray-700">{currentCount}</span>
+          <span>/ {targetCount}</span>
         </span>
+
         {remaining > 0 ? (
-          <span className="text-gray-500 text-xs">{remaining} adet kaldı</span>
+          <span className={`text-xs font-medium ${getRemainingColor(percentage)}`}>
+            {remaining} adet kaldı
+          </span>
         ) : (
-          <span className="text-green-600 text-xs font-semibold">Hedef doldu!</span>
+          <span className="text-xs font-medium text-emerald-600">
+            Talep tamamlandı
+          </span>
         )}
       </div>
-      <Progress value={progress} className="h-2" />
+
       {!compact && (
-        <p className="text-xs text-gray-400 text-right">{progress}% tamamlandı</p>
+        <p className="text-xs text-gray-400 text-right">%{percentage} tamamlandı</p>
       )}
     </div>
   );

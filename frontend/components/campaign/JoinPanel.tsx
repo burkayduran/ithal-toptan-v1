@@ -187,14 +187,14 @@ export default function JoinPanel({ campaign, participant }: JoinPanelProps) {
             {isPending
               ? "Kaydediliyor..."
               : campaign.status === "moq_reached"
-              ? "Ödeme Listesine Katıl"
+              ? "Bekleme Listesine Katıl"
               : "Bekleme Listesine Katıl"}
           </Button>
 
           <p className="text-xs text-gray-400 text-center">
             {campaign.status === "moq_reached"
-              ? "Ödeme bildirimi almak için katılın."
-              : "Ödeme yalnızca MOQ dolduğunda talep edilir."}
+              ? "Hedef dolduğunda ödeme bildirimi alacaksınız."
+              : "Yeterli talep oluştuğunda ödeme bildirimi alacaksınız."}
           </p>
         </>
       ) : campaign.status === "payment_collecting" ? (

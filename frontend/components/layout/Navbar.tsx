@@ -30,9 +30,9 @@ export default function Navbar() {
           href="/"
           className="flex items-center gap-2 font-bold text-xl tracking-tight text-gray-900"
         >
-          <ShoppingBag className="h-6 w-6 text-blue-600" />
+          <ShoppingBag className="h-6 w-6 text-purple-600" />
           <span>
-            İthal <span className="text-blue-600">Toptan</span>
+            İthal <span className="text-purple-600">Toptan</span>
           </span>
         </Link>
 
