@@ -14,13 +14,13 @@ from pydantic import BaseModel, Field
 
 CampaignStatus = Literal[
     "draft", "active", "moq_reached", "payment_collecting",
-    "ordered", "delivered", "cancelled",
+    "ordered", "shipped", "delivered", "cancelled",
 ]
 SuggestionStatus = Literal["pending", "reviewing", "approved", "rejected"]
 ParticipantStatus = Literal["joined", "invited", "paid", "expired", "cancelled"]
 PaymentStageV2 = Literal[
     "campaign_active", "moq_reached", "payment_confirmed",
-    "order_placed", "delivered",
+    "order_placed", "shipping", "delivered",
 ]
 
 

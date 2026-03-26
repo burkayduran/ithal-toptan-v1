@@ -38,14 +38,13 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 const ALLOWED_TRANSITIONS: Record<string, string[]> = {
   draft: ["active", "cancelled"],
-  active: ["moq_reached", "cancelled", "failed"],
-  moq_reached: ["payment_collecting", "cancelled", "failed"],
-  payment_collecting: ["ordered", "cancelled", "failed"],
+  active: ["moq_reached", "cancelled"],
+  moq_reached: ["payment_collecting", "cancelled"],
+  payment_collecting: ["ordered", "cancelled"],
   ordered: ["shipped", "cancelled"],
   shipped: ["delivered"],
   delivered: [],
   cancelled: [],
-  failed: [],
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -57,7 +56,6 @@ const STATUS_LABELS: Record<string, string> = {
   shipped: "Kargoda",
   delivered: "Teslim Edildi",
   cancelled: "İptal",
-  failed: "Başarısız",
 };
 
 function StatusSelect({
@@ -169,7 +167,7 @@ function EditForm({
         );
         if (!confirmed) return;
       }
-      const STATUS_ORDER = ["draft", "active", "moq_reached", "payment_collecting", "ordered", "delivered"];
+      const STATUS_ORDER = ["draft", "active", "moq_reached", "payment_collecting", "ordered", "shipped", "delivered"];
       const oldIdx = STATUS_ORDER.indexOf(campaign.status);
       const newIdx = STATUS_ORDER.indexOf(form.status);
       if (

@@ -338,7 +338,7 @@ async def update_campaign(
     campaign, product = row
 
     # Lock pricing fields if payment phase started
-    LOCKED_STATUSES = {"moq_reached", "payment_collecting", "ordered"}
+    LOCKED_STATUSES = {"moq_reached", "payment_collecting", "ordered", "shipped", "delivered"}
     PRICING_FIELDS = [
         "unit_price_usd", "moq", "shipping_cost_usd", "customs_rate",
         "margin_rate", "supplier_name", "supplier_country", "alibaba_product_url",
@@ -371,15 +371,14 @@ async def update_campaign(
 
         ALLOWED_TRANSITIONS: dict[str, set[str]] = {
             "draft":              {"active", "cancelled"},
-            "active":             {"moq_reached", "cancelled", "failed"},
-            "moq_reached":        {"payment_collecting", "cancelled", "failed"},
-            "payment_collecting": {"ordered", "cancelled", "failed"},
+            "active":             {"moq_reached", "cancelled"},
+            "moq_reached":        {"payment_collecting", "cancelled"},
+            "payment_collecting": {"ordered", "cancelled"},
             "ordered":            {"shipped", "cancelled"},
             "shipped":            {"delivered"},
             # terminal states — no outgoing transitions
             "delivered":          set(),
             "cancelled":          set(),
-            "failed":             set(),
         }
 
         allowed = ALLOWED_TRANSITIONS.get(old_status, set())
@@ -404,6 +403,7 @@ async def update_campaign(
             campaign.ordered_at = now_ts
         elif new_status == "delivered":
             campaign.delivered_at = now_ts
+        # shipped_at field henüz Campaign modelinde yok; status history'de izleniyor
 
         # Status history kaydı
         db.add(CampaignStatusHistory(

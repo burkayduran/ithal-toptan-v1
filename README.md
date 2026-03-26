@@ -1,416 +1,233 @@
-# Toplu Alışveriş Platformu - Backend Core
+# Toplu Alışveriş Platformu
 
-## ✅ Tamamlanan Özellikler
-
-### Hafta 1 - Backend Core ✓
-- ✅ FastAPI application
-- ✅ PostgreSQL + SQLAlchemy (async)
-- ✅ Redis integration + MoQ Service
-- ✅ JWT Authentication
-- ✅ 8 Database models
-- ✅ Wishlist + Real-time SSE
-- ✅ Docker Compose setup
-
-### Hafta 2 - Admin Panel ⭐ YENİ
-- ✅ Admin endpoints
-- ✅ Price calculator
-- ✅ Dual workflow (Admin ekler + User önerir)
-- ✅ Draft/Publish system
-
-### API Endpoints
-
-#### 🔴 Admin Endpoints (Sadece Admin)
-```
-POST   /api/admin/products              # Direkt ürün ekle
-POST   /api/admin/products/{id}/publish # Yayınla
-PATCH  /api/admin/products/{id}         # Güncelle
-GET    /api/admin/products              # Tüm ürünler (draft dahil)
-GET    /api/admin/product-requests      # Kullanıcı önerileri
-PATCH  /api/admin/product-requests/{id} # Öneri güncelle
-POST   /api/admin/calculate-price       # Fiyat önizleme
-```
-
-#### 🟢 Authentication
-- `POST /api/v1/auth/register` - Yeni kullanıcı kaydı
-- `POST /api/v1/auth/login` - Giriş
-- `GET /api/v1/auth/me` - Mevcut kullanıcı bilgisi
-- `PATCH /api/v1/auth/me` - Profil güncelleme
-
-#### 🟢 Products (Public)
-```
-GET    /api/v1/products                 # Aktif ürünler (yayınlanmış)
-GET    /api/v1/products/{id}            # Ürün detayı
-POST   /api/v1/products/request         # Ürün önerisi gönder
-GET    /api/v1/products/categories/     # Kategoriler
-```
-
-#### 🟢 Wishlist ⭐
-- `POST /api/v1/wishlist/add` - Wishlist'e ekle
-- `DELETE /api/v1/wishlist/{id}` - Çıkar
-- `GET /api/v1/wishlist/my` - Tüm wishlist'im
-- `GET /api/v1/wishlist/progress/{id}` - MoQ progress
-
-#### Real-time Updates ⭐ YENİ
-- `GET /api/v1/moq/progress/{id}` - SSE stream (real-time MoQ updates)
-
-### MoQ Service ⭐ YENİ
-- ✅ Redis atomic counter (race condition safe)
-- ✅ Auto-trigger when MoQ reached
-- ✅ 48-hour payment window
-- ✅ Expired entry cleanup
-- ✅ Batch order creation
-- ✅ Real-time pub/sub for SSE
+Grup alışveriş (group-buy) platformu — kullanıcılar kampanyalara katılır, MOQ dolunca ödeme süreci başlar.
 
 ---
 
-## 🚀 Hızlı Başlangıç
+## Mimari
+
+```
+frontend/   Next.js 14 (App Router) — kullanıcı ve admin arayüzü
+backend/    FastAPI + SQLAlchemy (async) + PostgreSQL + Redis
+```
+
+---
+
+## Hızlı Başlangıç
 
 ### Gereksinimler
-- Docker & Docker Compose
-- Python 3.12+ (local development için)
 
-### Docker ile Çalıştırma (Önerilen)
+- Docker & Docker Compose **veya** Python 3.12+ / Node.js 18+
+- PostgreSQL 15+, Redis 7+
+
+### Docker ile (Önerilen)
 
 ```bash
-# 1. Docker compose ile tüm servisleri başlat
+# 1. Env dosyasını hazırla
+cp backend/.env.example backend/.env
+# Gerekirse düzenle
+
+# 2. Tüm servisleri başlat
 docker compose up -d
 
-# 2. API hazır!
-# - API: http://localhost:8000
-# - Docs: http://localhost:8000/api/docs
-# - Health: http://localhost:8000/health
-
-# Logları görüntüle
-docker compose logs -f api
-
-# Durdur
-docker compose down
+# API:      http://localhost:8000
+# API Docs: http://localhost:8000/api/docs
+# Frontend: http://localhost:3000
 ```
 
-### Local Development (Docker olmadan)
+### Local Dev (Docker olmadan)
 
 ```bash
-# 1. PostgreSQL ve Redis yükle (macOS)
-brew install postgresql redis
+# ── Backend ──────────────────────────────────────────────────────────────────
+cd backend
 
-# 2. Servisleri başlat
-brew services start postgresql
-brew services start redis
+# 1. Env dosyasını hazırla
+cp .env.example .env
+# DATABASE_URL ve REDIS_URL'i local değerlere göre düzenle
 
-# 3. Database oluştur
+# 2. Virtual environment
+python -m venv venv
+source venv/bin/activate        # Windows: venv\Scripts\activate
+
+# 3. Bağımlılıkları yükle
+pip install -r requirements.txt
+# Geliştirme araçları için (opsiyonel):
+# pip install -r requirements-dev.txt
+
+# 4. Database başlat (PostgreSQL çalışıyor olmalı)
 createdb toplu_alisveris
 
-# 4. Virtual environment
-cd backend
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-
-# 5. Dependencies yükle
-pip install -r requirements.txt
-
-# 6. .env dosyasını yapılandır
-cp .env.example .env
-# Düzenle:
-# DATABASE_URL=postgresql+asyncpg://localhost/toplu_alisveris
-# REDIS_URL=redis://localhost:6379/0
-# RESEND_API_KEY=re_xxxxx (opsiyonel)
-
-# 7. API server başlat
+# 5. API server
 uvicorn app.main:app --reload --port 8000
 
-# 8. Celery worker (ayrı terminal)
+# 6. Celery worker (ayrı terminal)
 celery -A app.tasks.celery_app worker --loglevel=info
 
-# 9. Celery beat (ayrı terminal)
+# 7. Celery beat — zamanlanmış görevler (ayrı terminal)
 celery -A app.tasks.celery_app beat --loglevel=info
 
-# 10. Flower monitoring (opsiyonel, ayrı terminal)
-celery -A app.tasks.celery_app flower --port=5555
+# ── Frontend ─────────────────────────────────────────────────────────────────
+cd frontend
+
+# 1. Env dosyasını hazırla
+cp .env.local.example .env.local
+
+# 2. Bağımlılıkları yükle
+npm install
+
+# 3. Dev server başlat
+npm run dev        # http://localhost:3000
 ```
 
 ---
 
-## 📊 Veritabanı
+## API Endpoint Yapısı
 
-Tables automatically created on startup:
-- users
-- categories
-- product_requests
-- supplier_offers
-- wishlist_entries
-- payments
-- batch_orders
-- notifications
+### V2 Endpoints (Aktif — yeni domain modeli)
 
-## 🔑 API Endpoints
-
-### Authentication
-- `POST /api/v1/auth/register` - Yeni kullanıcı kaydı
-- `POST /api/v1/auth/login` - Giriş
-- `GET /api/v1/auth/me` - Mevcut kullanıcı bilgisi
-- `PATCH /api/v1/auth/me` - Profil güncelleme
-
-### Products
-- `GET /api/v1/products` - Ürün listesi (filter, search, pagination)
-- `GET /api/v1/products/{id}` - Ürün detayı
-- `POST /api/v1/products` - Yeni ürün talebi (auth required)
-- `PATCH /api/v1/products/{id}` - Ürün güncelle (admin)
-- `GET /api/v1/products/categories/` - Kategoriler
-
-## 🧪 Test Senaryoları
-
-### 1. Authentication
-```bash
-# Register
-curl -X POST http://localhost:8000/api/v1/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"email":"test@example.com","password":"test123","full_name":"Test User"}'
-
-# Response: {"access_token":"eyJ...","token_type":"bearer"}
-
-# Login
-curl -X POST http://localhost:8000/api/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"test@example.com","password":"test123"}'
-
-# Save token
-TOKEN="eyJ..."
+#### Public (auth gerektirmez)
+```
+GET    /api/v2/campaigns                     # Aktif kampanya listesi (paginated)
+GET    /api/v2/campaigns/{id}               # Kampanya detayı
+GET    /api/v2/campaigns/{id}/progress      # MOQ ilerleme (rate-limited)
+GET    /api/v2/campaigns/{id}/similar       # Benzer kampanyalar
 ```
 
-### 2. Admin: Ürün Ekle ⭐ YENİ
-```bash
-# Admin login (önce admin user oluştur)
-ADMIN_TOKEN=$(curl -X POST http://localhost:8000/api/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"admin@test.com","password":"admin123"}' | jq -r '.access_token')
-
-# Fiyat önizleme
-curl -X POST http://localhost:8000/api/admin/calculate-price \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "unit_price_usd": 800,
-    "moq": 50,
-    "shipping_cost_usd": 200,
-    "customs_rate": 0.35,
-    "margin_rate": 0.30
-  }'
-
-# Ürün ekle
-PRODUCT_ID=$(curl -X POST http://localhost:8000/api/admin/products \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "title": "iPhone 15 Pro Max 256GB",
-    "description": "Apple iPhone 15 Pro Max",
-    "unit_price_usd": 800,
-    "moq": 50,
-    "lead_time_days": 30,
-    "shipping_cost_usd": 200,
-    "customs_rate": 0.35,
-    "margin_rate": 0.30
-  }' | jq -r '.id')
-
-# Yayınla
-curl -X POST http://localhost:8000/api/admin/products/$PRODUCT_ID/publish \
-  -H "Authorization: Bearer $ADMIN_TOKEN"
+#### Kullanıcı (JWT gerekli)
+```
+GET    /api/v2/campaigns/my                 # Katıldığım kampanyalar
+POST   /api/v2/campaigns/{id}/join          # Kampanyaya katıl
+DELETE /api/v2/campaigns/{id}/leave         # Kampanyadan ayrıl
+GET    /api/v2/payments/{participant_id}    # Ödeme/durum görünümü
+POST   /api/v2/payments/{participant_id}/confirm  # Ödeme onayla
 ```
 
-### 3. User: Ürün Önerisi ⭐ YENİ
-```bash
-# Kullanıcı ürün önerisi gönderir
-curl -X POST http://localhost:8000/api/v1/products/request \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "title": "Samsung S24 Ultra",
-    "description": "512GB version",
-    "expected_price_try": 45000
-  }'
-
-# Admin önerileri görür
-curl http://localhost:8000/api/admin/product-requests?status=pending \
-  -H "Authorization: Bearer $ADMIN_TOKEN"
+#### Admin (admin JWT gerekli)
+```
+POST   /api/v2/admin/campaigns              # Kampanya oluştur
+GET    /api/v2/admin/campaigns              # Tüm kampanyalar (draft dahil)
+GET    /api/v2/admin/campaigns/{id}         # Kampanya detayı (snapshot alanları dahil)
+PATCH  /api/v2/admin/campaigns/{id}         # Güncelle / status değiştir
+POST   /api/v2/admin/campaigns/{id}/publish # Draft → Active yayınla
+POST   /api/v2/admin/campaigns/bulk-publish # Toplu yayınla
+POST   /api/v2/admin/campaigns/bulk-cancel  # Toplu iptal
+GET    /api/v2/admin/suggestions            # Kullanıcı önerileri
+PATCH  /api/v2/admin/suggestions/{id}       # Öneri güncelle
+GET    /api/v2/admin/categories             # Kategoriler
+POST   /api/v2/admin/categories             # Kategori oluştur
+PATCH  /api/v2/admin/categories/{id}        # Kategori güncelle
+DELETE /api/v2/admin/categories/{id}        # Kategori sil
+POST   /api/v2/admin/calculate-price        # Fiyat önizleme
 ```
 
-### 4. Products (Public)
-```bash
-# Aktif ürünleri listele (artık sadece yayınlanmış ürünler)
-curl http://localhost:8000/api/v1/products
-
-# Ürün detayı
-curl http://localhost:8000/api/v1/products/$PRODUCT_ID
+### V1 Endpoints (Legacy)
 ```
-
-### 5. Wishlist
-```bash
-# Add to wishlist
-curl -X POST http://localhost:8000/api/v1/wishlist/add \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"request_id":"PRODUCT_UUID","quantity":1}'
-
-# Get my wishlist
-curl http://localhost:8000/api/v1/wishlist/my \
-  -H "Authorization: Bearer $TOKEN"
-
-# Get MoQ progress
-curl http://localhost:8000/api/v1/wishlist/progress/PRODUCT_UUID
-
-# Remove from wishlist
-curl -X DELETE http://localhost:8000/api/v1/wishlist/PRODUCT_UUID \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-### 4. Real-time MoQ Updates (SSE) ⭐ NEW
-```javascript
-// Frontend JavaScript
-const eventSource = new EventSource('http://localhost:8000/api/v1/moq/progress/PRODUCT_UUID');
-
-eventSource.onmessage = (event) => {
-  const count = event.data;
-  console.log('Current MoQ count:', count);
-  // Update progress bar UI
-  updateProgressBar(count);
-};
-
-eventSource.onerror = (error) => {
-  console.error('SSE connection error:', error);
-  eventSource.close();
-};
-```
-
-### 5. Health Check
-```bash
-curl http://localhost:8000/health
-# Response: {"status":"ok","app":"Toplu Alışveriş Platformu","version":"1.0.0"}
+POST   /api/v1/auth/register
+POST   /api/v1/auth/login
+GET    /api/v1/auth/me
+PATCH  /api/v1/auth/me
 ```
 
 ---
 
-## 🎯 İş Akışı
-
-### Wishlist → MoQ → Payment Flow
+## Kampanya Status Akışı
 
 ```
-1️⃣ User adds to wishlist
-   └─> Redis counter increments (atomic)
-   
-2️⃣ Counter >= MoQ threshold?
-   ├─> YES: Trigger payment phase
-   │   ├─> All "waiting" → "notified"
-   │   ├─> Set 48h deadline
-   │   └─> Create notification records
-   └─> NO: Continue collecting
-
-3️⃣ After 48 hours (Celery cleanup task)
-   ├─> Mark expired entries
-   ├─> Count paid entries
-   └─> paid_count >= MoQ?
-       ├─> YES: Create batch order
-       └─> NO: Reset to "active"
+draft → active → moq_reached → payment_collecting → ordered → shipped → delivered
+  └──────────────────────────────────────────────────────────────┘
+                          (herhangi bir aşamada cancelled)
 ```
+
+- `draft` → `active`: Admin yayınlar
+- `active` → `moq_reached`: MOQ dolunca (otomatik veya admin)
+- `moq_reached`: Katılan kullanıcı `invited` statüsüne geçer, ödeme daveti gönderilir
+- `payment_collecting` → `ordered`: Yeterli ödeme toplandı, sipariş verildi
+- `ordered` → `shipped` → `delivered`: Kargo ve teslimat aşaması
+
+### Payment Stage Eşlemesi (Frontend)
+
+| participant_status | campaign_status | stage             |
+|--------------------|-----------------|-------------------|
+| joined / expired   | any             | campaign_active   |
+| invited            | any             | moq_reached       |
+| paid               | moq_reached / payment_collecting | payment_confirmed |
+| paid               | ordered         | order_placed      |
+| paid               | shipped         | shipping          |
+| paid               | delivered       | delivered         |
 
 ---
 
-## 🧪 Test
+## Backend Testleri
 
-## 📝 Tamamlanan ve Kalan İşler
-
-### ✅ Hafta 1 - TAMAMLANDI
-- [x] Backend core setup
-- [x] Database models (8 tables)
-- [x] Authentication (JWT)
-- [x] Products CRUD
-- [x] Wishlist endpoints
-- [x] MoQ service (Redis counter)
-- [x] MoQ trigger logic
-- [x] SSE endpoint (real-time progress)
-- [x] Docker Compose
-
-### 🔄 Hafta 2 - SONRAKİ ADIMLAR
-- [ ] Admin endpoints (supplier offers)
-- [ ] Price calculation engine
-- [ ] iyzico payment integration
-- [ ] Celery tasks setup
-- [ ] Email service (Resend)
-- [ ] Email templates
-- [ ] Background tasks (cleanup, reminders)
-
-### 📅 Hafta 3 - FRONTEND
-- [ ] Next.js setup
-- [ ] Authentication pages
-- [ ] Product listing & detail
-- [ ] Wishlist UI
-- [ ] Payment flow
-- [ ] Real-time MoQ progress bar
-
----
-
-## 🗂️ Proje Yapısı
-
-```
-toplu-alisveris/
-├── docker-compose.yml          # PostgreSQL + Redis + API
-├── README.md                   # Bu dosya
-├── .gitignore
-└── backend/
-    ├── Dockerfile
-    ├── requirements.txt        # Python dependencies
-    ├── .env                    # Environment variables
-    └── app/
-        ├── main.py             # FastAPI application
-        ├── core/
-        │   ├── config.py       # Settings
-        │   └── auth.py         # JWT utilities
-        ├── db/
-        │   └── session.py      # Database session
-        ├── models/
-        │   └── models.py       # SQLAlchemy models (8 tables)
-        ├── schemas/
-        │   └── schemas.py      # Pydantic schemas
-        ├── services/
-        │   └── moq_service.py  # MoQ tracking & trigger logic
-        └── api/v1/endpoints/
-            ├── auth.py         # Authentication endpoints
-            ├── products.py     # Products endpoints
-            └── wishlist.py     # Wishlist endpoints
-```
-
----
-
-## 📝 Sonraki Adımlar
-
-## 🐛 Sorun Giderme
-
-### Port zaten kullanımda
 ```bash
-# PostgreSQL port conflict
+cd backend
+
+# Syntax kontrolü
+python -m compileall app/
+
+# Import testi (env gerekli)
+SECRET_KEY=test DATABASE_URL=postgresql+asyncpg://localhost/test \
+  python -c "from app.main import app; print('OK')"
+
+# Unit/integration testleri
+pytest tests/ -v
+
+# Belirli bir modül
+pytest tests/test_campaigns.py -v
+```
+
+---
+
+## Proje Yapısı
+
+```
+ithal-toptan-v1/
+├── backend/
+│   ├── .env.example            ← Env şablon dosyası
+│   ├── requirements.txt
+│   ├── requirements-dev.txt    ← Test/lint araçları
+│   ├── alembic/                ← DB migrasyonları
+│   └── app/
+│       ├── main.py
+│       ├── models/models.py    ← SQLAlchemy modelleri
+│       ├── schemas/
+│       │   ├── schemas.py      ← V1 schema (legacy)
+│       │   └── v2_schemas.py   ← V2 schema (aktif)
+│       ├── api/
+│       │   ├── admin/admin_v2.py
+│       │   └── v2/
+│       │       ├── campaigns.py
+│       │       └── payments.py
+│       ├── services/
+│       │   └── price_service.py
+│       └── tasks/              ← Celery görevleri
+├── frontend/
+│   ├── .env.local.example      ← Env şablon dosyası
+│   ├── app/                    ← Next.js App Router sayfaları
+│   ├── components/campaign/    ← Kampanya bileşenleri
+│   └── features/               ← Domain logic (hooks, API, types)
+├── docker-compose.yml
+└── README.md
+```
+
+---
+
+## Sorun Giderme
+
+### Port çakışması
+```bash
 docker compose down
-sudo lsof -i :5432
-# Process'i kill et
-
-# API port conflict
-sudo lsof -i :8000
+sudo lsof -i :8000   # API portu
+sudo lsof -i :5432   # PostgreSQL portu
 ```
 
-### Database connection error
-```bash
-# .env dosyasında DATABASE_URL kontrol et
-# Docker kullanıyorsan: @db:5432
-# Local kullanıyorsan: @localhost:5432
-```
+### Database bağlantı hatası
+`.env` dosyasında `DATABASE_URL` değerini kontrol et:
+- Docker: `@db:5432`
+- Local: `@localhost:5432`
 
-### Migration errors
+### Migration hatası (dev only)
 ```bash
-# Tabloları sıfırla (DEV ONLY!)
 docker compose down -v
 docker compose up -d
 ```
-
-## 📞 İletişim
-
-Hata bulursan veya soru varsa, lütfen detaylı açıklama ile bildir:
-- Stack trace
-- Request/response body
-- Environment (Docker/local)

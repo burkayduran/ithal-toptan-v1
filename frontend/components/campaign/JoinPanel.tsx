@@ -31,7 +31,13 @@ export default function JoinPanel({ campaign, participant }: JoinPanelProps) {
 
   // ── If user just joined in this session ──────────────────────────────────
   if (justJoined) {
-    return <WishlistSuccessNotice quantity={quantity} campaignTitle={campaign.title} />;
+    return (
+      <WishlistSuccessNotice
+        quantity={quantity}
+        campaignTitle={campaign.title}
+        campaignStatus={campaign.status}
+      />
+    );
   }
 
   // ── Already has an invited entry → show payment CTA ──────────────────────
@@ -106,8 +112,9 @@ export default function JoinPanel({ campaign, participant }: JoinPanelProps) {
   // ── Backend accepts joins for active + moq_reached ────────────────────────
   const canJoin = campaign.status === "active" || campaign.status === "moq_reached";
 
-  // ── Already in queue (joined) while campaign still active ───────────────
+  // ── Already in queue (joined) while campaign still accepting ────────────
   if (participant?.status === "joined" && canJoin) {
+    const isPaymentPhase = campaign.status === "moq_reached";
     return (
       <div className="rounded-xl border border-blue-200 bg-blue-50 p-5 space-y-4">
         {canShowProgress && (
@@ -118,7 +125,11 @@ export default function JoinPanel({ campaign, participant }: JoinPanelProps) {
         )}
         <StateNoticeBanner
           type="info"
-          message="Bekleme listesine eklendiniz. Hedef dolduğunda ödeme bildirimi alacaksınız."
+          message={
+            isPaymentPhase
+              ? "Hedef doldu! Ödeme davetiniz en kısa sürede gönderilecek."
+              : "Katılım listendesiniz. Hedef dolduğunda ödeme daveti alacaksınız."
+          }
         />
         <Link href="/my-campaigns">
           <Button variant="outline" className="w-full">
@@ -159,9 +170,9 @@ export default function JoinPanel({ campaign, participant }: JoinPanelProps) {
         <>
           {campaign.status === "moq_reached" && (
             <StateNoticeBanner
-              type="info"
+              type="warning"
               title="Hedef doldu!"
-              message="Katılırsanız ödeme bildirimi alırsınız."
+              message="Katılırsanız ödeme süreci hemen başlar. Ödeme daveti gönderilecek."
             />
           )}
 
@@ -181,20 +192,22 @@ export default function JoinPanel({ campaign, participant }: JoinPanelProps) {
           >
             {isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" />
+            ) : campaign.status === "moq_reached" ? (
+              <CreditCard className="h-4 w-4" />
             ) : (
               <ShoppingCart className="h-4 w-4" />
             )}
             {isPending
               ? "Kaydediliyor..."
               : campaign.status === "moq_reached"
-              ? "Bekleme Listesine Katıl"
-              : "Bekleme Listesine Katıl"}
+              ? "Ödeme Sürecine Katıl"
+              : "Katılım Listesine Ekle"}
           </Button>
 
           <p className="text-xs text-gray-400 text-center">
             {campaign.status === "moq_reached"
-              ? "Hedef dolduğunda ödeme bildirimi alacaksınız."
-              : "Yeterli talep oluştuğunda ödeme bildirimi alacaksınız."}
+              ? "Yerinizi ayırtmak için ödemeyi tamamlamanız gerekecek."
+              : "Yeterli talep oluştuğunda ödeme daveti alacaksınız."}
           </p>
         </>
       ) : campaign.status === "payment_collecting" ? (
@@ -207,6 +220,11 @@ export default function JoinPanel({ campaign, participant }: JoinPanelProps) {
         <div className="text-center py-4 space-y-1">
           <p className="font-semibold text-purple-700">Sipariş verildi</p>
           <p className="text-sm text-gray-500">Ürün tedarik aşamasında.</p>
+        </div>
+      ) : campaign.status === "shipped" ? (
+        <div className="text-center py-4 space-y-1">
+          <p className="font-semibold text-blue-700">Kargoya verildi</p>
+          <p className="text-sm text-gray-500">Ürün yolda, yakında teslim edilecek.</p>
         </div>
       ) : campaign.status === "delivered" ? (
         <div className="text-center py-4">

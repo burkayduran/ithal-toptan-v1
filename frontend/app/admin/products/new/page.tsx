@@ -218,7 +218,7 @@ export default function NewProductPage() {
                 <Field label="Teslimat Süresi (gün)">
                   <Input type="number" min="1" value={form.lead_time_days} onChange={set("lead_time_days")} placeholder="30" />
                 </Field>
-                <Field label="Kargo Maliyeti (USD / adet)">
+                <Field label="Toplam Kargo (USD)" hint="Sistem bunu MOQ'ya bölerek adet başı maliyeti hesaplar">
                   <Input type="number" step="0.01" min="0" value={form.shipping_cost_usd} onChange={set("shipping_cost_usd")} />
                 </Field>
                 <Field label="Gümrük Oranı (%)" hint="Örn: 35 → %35">

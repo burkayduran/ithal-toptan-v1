@@ -25,6 +25,8 @@ def _derive_stage(participant_status: str, campaign_status: str) -> str:
     if participant_status == "paid":
         if campaign_status == "delivered":
             return "delivered"
+        if campaign_status == "shipped":
+            return "shipping"
         if campaign_status == "ordered":
             return "order_placed"
         return "payment_confirmed"

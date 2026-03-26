@@ -29,7 +29,7 @@ router = APIRouter()
 
 # Statuses visible to public
 _PUBLIC_STATUSES = {"active", "moq_reached", "payment_collecting"}
-_DETAIL_STATUSES = {"active", "moq_reached", "payment_collecting", "ordered", "delivered"}
+_DETAIL_STATUSES = {"active", "moq_reached", "payment_collecting", "ordered", "shipped", "delivered"}
 
 
 # ── Helper ────────────────────────────────────────────────────────────────

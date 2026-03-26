@@ -14,6 +14,8 @@ export function useMyParticipations() {
 
 export function useJoinCampaign() {
   const queryClient = useQueryClient();
+  const { user } = useAuthStore();
+  const userId = user?.id ?? null;
   return useMutation({
     mutationFn: ({
       campaignId,
@@ -26,12 +28,12 @@ export function useJoinCampaign() {
       await queryClient.cancelQueries({ queryKey: ["my-participations"] });
       await queryClient.cancelQueries({ queryKey: ["campaigns"] });
 
-      const previous = queryClient.getQueryData<Participant[]>(["my-participations"]);
+      const previous = queryClient.getQueryData<Participant[]>(["my-participations", userId]);
       return { previous };
     },
     onError: (_err, _variables, context) => {
       if (context?.previous) {
-        queryClient.setQueryData(["my-participations"], context.previous);
+        queryClient.setQueryData(["my-participations", userId], context.previous);
       }
     },
     onSettled: (_data, _error, variables) => {
@@ -44,16 +46,18 @@ export function useJoinCampaign() {
 
 export function useLeaveCampaign() {
   const queryClient = useQueryClient();
+  const { user } = useAuthStore();
+  const userId = user?.id ?? null;
   return useMutation({
     mutationFn: (campaignId: string) => leaveCampaign(campaignId),
     onMutate: async (campaignId) => {
       await queryClient.cancelQueries({ queryKey: ["my-participations"] });
 
-      const previous = queryClient.getQueryData<Participant[]>(["my-participations"]);
+      const previous = queryClient.getQueryData<Participant[]>(["my-participations", userId]);
 
       if (previous) {
         queryClient.setQueryData(
-          ["my-participations"],
+          ["my-participations", userId],
           previous.filter((p) => p.campaign_id !== campaignId)
         );
       }
@@ -62,7 +66,7 @@ export function useLeaveCampaign() {
     },
     onError: (_err, _campaignId, context) => {
       if (context?.previous) {
-        queryClient.setQueryData(["my-participations"], context.previous);
+        queryClient.setQueryData(["my-participations", userId], context.previous);
       }
     },
     onSettled: (_data, _error, campaignId) => {

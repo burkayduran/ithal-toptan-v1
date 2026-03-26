@@ -14,6 +14,7 @@ export type CampaignStatus =
   | "moq_reached"
   | "payment_collecting"
   | "ordered"
+  | "shipped"
   | "delivered"
   | "cancelled";
 
