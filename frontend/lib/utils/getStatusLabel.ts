@@ -11,6 +11,8 @@ export function getCampaignStatusLabel(status: CampaignStatus): string {
       return "Ödeme Toplanıyor";
     case "ordered":
       return "Sipariş Verildi";
+    case "shipped":
+      return "Kargoda";
     case "delivered":
       return "Teslim Edildi";
     case "cancelled":
@@ -51,6 +53,7 @@ export function getStatusVariant(
     case "moq_reached":
     case "payment_collecting":
     case "ordered":
+    case "shipped":
     case "delivered":
       return "secondary";
     case "cancelled":

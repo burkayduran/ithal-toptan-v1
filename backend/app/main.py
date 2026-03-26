@@ -76,7 +76,7 @@ app.include_router(admin_v2.router, prefix="/api/v2/admin", tags=["V2 Admin"])
 
 
 # SSE endpoint for real-time MoQ progress
-_SSE_ALLOWED_STATUSES = {"active", "moq_reached", "payment_collecting", "ordered", "delivered"}
+_SSE_ALLOWED_STATUSES = {"active", "moq_reached", "payment_collecting", "ordered", "shipped", "delivered"}
 
 @app.get("/api/v2/moq/progress/{campaign_id}")
 @limiter.limit("30/minute")

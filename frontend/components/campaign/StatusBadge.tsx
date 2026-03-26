@@ -21,6 +21,7 @@ const STATUS_META: Record<string, StatusMeta> = {
   moq_reached:         { label: "Hedef Doldu",         className: "bg-blue-100 text-blue-800 border-blue-200" },
   payment_collecting:  { label: "Ödeme Toplanıyor",    className: "bg-amber-100 text-amber-800 border-amber-200" },
   ordered:             { label: "Sipariş Verildi",     className: "bg-purple-100 text-purple-800 border-purple-200" },
+  shipped:             { label: "Kargoda",             className: "bg-blue-100 text-blue-800 border-blue-200" },
   delivered:           { label: "Teslim Edildi",       className: "bg-gray-100 text-gray-700 border-gray-200" },
   cancelled:           { label: "İptal Edildi",        className: "bg-red-100 text-red-700 border-red-200" },
   pending:             { label: "Beklemede",           className: "bg-yellow-100 text-yellow-800 border-yellow-200" },

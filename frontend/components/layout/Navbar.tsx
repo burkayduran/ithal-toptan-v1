@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useAuthStore } from "@/features/auth/store";
 import { Button } from "@/components/ui/button";
-import { Heart, User, LogOut, Settings, Menu, X } from "lucide-react";
+import { Heart, LogOut, Settings, Menu, X } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 

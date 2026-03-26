@@ -134,13 +134,6 @@ export default function AdminCategoriesPage() {
     );
   }
 
-  /** Get display name with parent prefix for child categories */
-  function getDisplayName(cat: AdminCategory & { depth: number }) {
-    if (cat.depth === 0) return cat.name;
-    const parent = (categories ?? []).find((c) => c.id === cat.parent_id);
-    return parent ? `${parent.name} > ${cat.name}` : cat.name;
-  }
-
   return (
     <div className="p-6 max-w-3xl">
       <h1 className="text-xl font-bold text-gray-900 mb-6">Kategoriler</h1>

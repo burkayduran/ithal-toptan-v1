@@ -15,6 +15,7 @@ const STATUS_LABEL: Record<string, { label: string; variant: "default" | "second
   moq_reached: { label: "MOQ Doldu", variant: "default" },
   payment_collecting: { label: "Ödeme", variant: "default" },
   ordered: { label: "Sipariş", variant: "outline" },
+  shipped: { label: "Kargoda", variant: "outline" },
   delivered: { label: "Teslim", variant: "outline" },
   cancelled: { label: "İptal", variant: "destructive" },
 };
@@ -102,6 +103,7 @@ export default function AdminProductsPage() {
           <option value="moq_reached">MOQ Doldu</option>
           <option value="payment_collecting">Ödeme</option>
           <option value="ordered">Sipariş</option>
+          <option value="shipped">Kargoda</option>
           <option value="delivered">Teslim</option>
           <option value="cancelled">İptal</option>
         </select>
