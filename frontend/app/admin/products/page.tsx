@@ -18,6 +18,7 @@ const STATUS_LABEL: Record<string, { label: string; variant: "default" | "second
   shipped: { label: "Kargoda", variant: "outline" },
   delivered: { label: "Teslim", variant: "outline" },
   cancelled: { label: "İptal", variant: "destructive" },
+  failed:    { label: "Başarısız", variant: "destructive" },
 };
 
 export default function AdminProductsPage() {

@@ -129,9 +129,10 @@ class TestStateMachineTransitions:
         assert resp.status_code == 200
         assert resp.json()["status"] == "cancelled"
 
-    async def test_valid_transition_active_to_failed(
+    async def test_failed_status_is_rejected_by_schema(
         self, client: AsyncClient, db_session: AsyncSession,
     ):
+        """'failed' was removed from CampaignStatus — PATCH must return 422."""
         admin_token = await _make_admin(db_session, client)
         campaign, _, _ = await _create_campaign(db_session, status="active")
 
@@ -140,8 +141,9 @@ class TestStateMachineTransitions:
             json={"status": "failed"},
             headers=auth_headers(admin_token),
         )
-        assert resp.status_code == 200
-        assert resp.json()["status"] == "failed"
+        assert resp.status_code == 422, (
+            f"Expected 422 (schema rejection) but got {resp.status_code}: {resp.text}"
+        )
 
     async def test_invalid_transition_draft_to_ordered_rejected(
         self, client: AsyncClient, db_session: AsyncSession,
@@ -446,7 +448,7 @@ class TestPaymentSnapshotAmounts:
         assert resp.status_code == 200
         data = resp.json()
         # Amount should be 1200 (from participant snapshot), NOT 1500 (3 * campaign's 500)
-        assert float(data["total_amount_try"]) == pytest.approx(1200.0)
+        assert float(data["total_amount"]) == pytest.approx(1200.0)
 
     async def test_payment_response_lists_snapshot_amount(
         self, client: AsyncClient, db_session: AsyncSession,
@@ -480,7 +482,7 @@ class TestPaymentSnapshotAmounts:
         )
         assert resp.status_code == 200
         data = resp.json()
-        assert float(data["total_amount_try"]) == pytest.approx(1100.0)
+        assert float(data["total_amount"]) == pytest.approx(1100.0)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -546,17 +548,30 @@ class TestNotificationSentAtSemantics:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class TestCampaignStatusSchema:
-    """Verify shipped and failed are valid CampaignStatus values."""
+    """Verify CampaignStatus canonical set: shipped in, failed out."""
 
     def test_shipped_is_valid_status(self):
         from app.schemas.v2_schemas import CampaignUpdatePayload
         obj = CampaignUpdatePayload(status="shipped")
         assert obj.status == "shipped"
 
-    def test_failed_is_valid_status(self):
+    def test_failed_is_rejected_by_schema(self):
+        """'failed' was removed from campaign-level CampaignStatus."""
+        from pydantic import ValidationError
         from app.schemas.v2_schemas import CampaignUpdatePayload
-        obj = CampaignUpdatePayload(status="failed")
-        assert obj.status == "failed"
+        with pytest.raises(ValidationError):
+            CampaignUpdatePayload(status="failed")
+
+    def test_canonical_statuses_accepted(self):
+        """All canonical statuses must be accepted."""
+        from app.schemas.v2_schemas import CampaignUpdatePayload
+        canonical = [
+            "draft", "active", "moq_reached", "payment_collecting",
+            "ordered", "shipped", "delivered", "cancelled",
+        ]
+        for s in canonical:
+            obj = CampaignUpdatePayload(status=s)
+            assert obj.status == s
 
     def test_invalid_status_rejected(self):
         from pydantic import ValidationError

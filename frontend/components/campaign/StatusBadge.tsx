@@ -34,6 +34,7 @@ const STATUS_META: Record<string, StatusMeta> = {
   // Backward compat: old status values
   waiting:             { label: "Beklemede",           className: "bg-blue-50 text-blue-700 border-blue-200" },
   notified:            { label: "Ödeme Gerekli",       className: "bg-amber-100 text-amber-800 border-amber-200" },
+  failed:              { label: "Başarısız",           className: "bg-red-100 text-red-700 border-red-200" },
 };
 
 const FALLBACK: StatusMeta = { label: "", className: "bg-gray-100 text-gray-600 border-gray-200" };
