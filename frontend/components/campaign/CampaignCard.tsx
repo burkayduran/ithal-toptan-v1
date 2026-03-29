@@ -26,9 +26,12 @@ export default function CampaignCard({ campaign }: CampaignCardProps) {
       )
     : 0;
 
-  const isReached = percentage >= 100;
-  const isNearTarget = percentage >= 70 && percentage < 100;
-  const showCta = campaign.status === "moq_reached";
+  // isReached: count-based, not status-based. Guards "Hazır!" badge and CTA.
+  // A campaign can have moq_reached status but stale/zero count — defensive.
+  const isReached = canShowProgress && campaign.current_participant_count! >= campaign.moq!;
+  const isNearTarget = percentage >= 70 && !isReached;
+  // Show "Talep Oluştur" CTA only when status agrees AND count truly confirms it.
+  const showCta = campaign.status === "moq_reached" && isReached;
 
   return (
     <Link

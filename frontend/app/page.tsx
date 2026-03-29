@@ -25,8 +25,15 @@ export default function HomePage() {
 
   const activeCampaigns =
     campaigns?.filter((p) => p.status === "active") ?? [];
+  // Defensive: also require real count >= moq to avoid "0/30 Hedefe Ulaştı" edge case
   const moqReachedCampaigns =
-    campaigns?.filter((p) => p.status === "moq_reached") ?? [];
+    campaigns?.filter(
+      (p) =>
+        p.status === "moq_reached" &&
+        p.moq != null &&
+        p.current_participant_count != null &&
+        p.current_participant_count >= p.moq
+    ) ?? [];
   const paymentCollectingCampaigns =
     campaigns?.filter((p) => p.status === "payment_collecting") ?? [];
 

@@ -1,11 +1,14 @@
 """
 Idempotent seed script — safe to run multiple times.
-Creates demo categories, products, and campaigns for local development.
+Creates demo categories, products, campaigns, and participants for local development.
 
 Usage (from repo root):
     docker compose exec api python scripts/seed.py
     # or locally with DATABASE_URL set:
     cd backend && python scripts/seed.py
+
+Demo accounts created:
+    demo@example.com / DemoSifre123  (regular user, 30 participants on moq_reached campaign)
 """
 import asyncio
 import os
@@ -29,9 +32,12 @@ if "asyncpg" not in DATABASE_URL:
 engine = create_async_engine(DATABASE_URL, echo=False)
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
-# Import models after path is set
-from app.models.models import Category, Product, Campaign  # noqa: E402
+# Import models and auth after path is set
+from app.models.models import Category, Product, Campaign, CampaignParticipant, User  # noqa: E402
+from app.core.auth import get_password_hash  # noqa: E402
 
+
+DEMO_USER_ID = uuid.UUID("00000000-0000-0000-0000-d0000000000f")
 
 CATEGORIES = [
     {
@@ -77,6 +83,7 @@ PRODUCTS = [
     },
 ]
 
+# MOQ = 30, demo user accounts for 30 units → count matches MOQ exactly
 CAMPAIGNS = [
     {
         "id": uuid.UUID("00000000-0000-0000-0002-000000000001"),
@@ -90,7 +97,7 @@ CAMPAIGNS = [
         "fx_rate_snapshot": 38.0,
         "lead_time_days": 21,
         "activated_at": datetime(2026, 3, 1, tzinfo=timezone.utc),
-        # Seeded with some mock participants via moq_fill to look real
+        "demo_participants": None,  # no participants — shows as partially filled
     },
     {
         "id": uuid.UUID("00000000-0000-0000-0002-000000000002"),
@@ -105,12 +112,32 @@ CAMPAIGNS = [
         "lead_time_days": 14,
         "activated_at": datetime(2026, 2, 15, tzinfo=timezone.utc),
         "moq_reached_at": datetime(2026, 3, 10, tzinfo=timezone.utc),
+        # demo user covers all 30 units so count == moq, no inconsistency
+        "demo_participants": {"user_id": DEMO_USER_ID, "quantity": 30, "status": "invited"},
     },
 ]
 
 
 async def seed(db: AsyncSession) -> None:
-    # ── Categories ──────────────────────────────────────────────────────────
+    # ── Demo user ──────────────────────────────────────────────────────────────
+    existing_user = await db.get(User, DEMO_USER_ID)
+    if not existing_user:
+        demo_user = User(
+            id=DEMO_USER_ID,
+            email="demo@example.com",
+            hashed_password=get_password_hash("DemoSifre123"),
+            full_name="Demo Kullanıcı",
+            is_active=True,
+            is_admin=False,
+        )
+        db.add(demo_user)
+        print("  [+] Demo user: demo@example.com / DemoSifre123")
+    else:
+        print("  [=] Demo user already exists")
+
+    await db.flush()
+
+    # ── Categories ─────────────────────────────────────────────────────────────
     cat_map: dict[str, uuid.UUID] = {}
     for cat_data in CATEGORIES:
         existing = await db.get(Category, cat_data["id"])
@@ -130,7 +157,7 @@ async def seed(db: AsyncSession) -> None:
 
     await db.flush()
 
-    # ── Products ─────────────────────────────────────────────────────────────
+    # ── Products ───────────────────────────────────────────────────────────────
     for prod_data in PRODUCTS:
         existing = await db.get(Product, prod_data["id"])
         if not existing:
@@ -148,7 +175,7 @@ async def seed(db: AsyncSession) -> None:
 
     await db.flush()
 
-    # ── Campaigns ─────────────────────────────────────────────────────────────
+    # ── Campaigns + participants ───────────────────────────────────────────────
     for camp_data in CAMPAIGNS:
         existing = await db.get(Campaign, camp_data["id"])
         if not existing:
@@ -168,9 +195,24 @@ async def seed(db: AsyncSession) -> None:
             )
             db.add(campaign)
 
-            # Fetch product title for display
             prod = await db.get(Product, camp_data["product_id"])
             print(f"  [+] Campaign: {prod.title if prod else camp_data['product_id']} ({camp_data['status']})")
+
+            # Add demo participants if specified
+            p_spec = camp_data.get("demo_participants")
+            if p_spec:
+                price = camp_data.get("selling_price_try_snapshot")
+                participant = CampaignParticipant(
+                    campaign_id=camp_data["id"],
+                    user_id=p_spec["user_id"],
+                    quantity=p_spec["quantity"],
+                    status=p_spec["status"],
+                    unit_price_try_snapshot=price,
+                    total_amount_try_snapshot=round(p_spec["quantity"] * price, 2) if price else None,
+                    invited_at=camp_data.get("moq_reached_at"),
+                )
+                db.add(participant)
+                print(f"       └─ participant: demo user × {p_spec['quantity']} units ({p_spec['status']})")
         else:
             print(f"  [=] Campaign already exists: {camp_data['id']}")
 
@@ -183,6 +225,10 @@ async def main() -> None:
         await seed(db)
     await engine.dispose()
     print("Done.")
+    print()
+    print("Demo accounts:")
+    print("  demo@example.com / DemoSifre123  (regular user)")
+    print("  Run create_admin.py to create an admin account.")
 
 
 if __name__ == "__main__":

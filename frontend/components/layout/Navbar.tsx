@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useAuthStore } from "@/features/auth/store";
 import { Button } from "@/components/ui/button";
-import { Heart, LogOut, Settings, Menu, X } from "lucide-react";
+import { Heart, LogOut, Menu, X } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
@@ -27,7 +27,7 @@ export default function Navbar() {
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/60">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex h-16 items-center justify-between">
-        {/* Logo — gradient icon like WishMOQ */}
+        {/* Logo */}
         <Link
           href="/"
           className="flex items-center gap-2.5 font-bold text-xl tracking-tight text-gray-900"
@@ -40,7 +40,7 @@ export default function Navbar() {
           </span>
         </Link>
 
-        {/* Desktop nav */}
+        {/* Desktop nav — no admin link; admin panel is at /admin directly */}
         <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-gray-600">
           <Link
             href="/campaigns"
@@ -54,15 +54,6 @@ export default function Navbar() {
           >
             Siparişlerim
           </Link>
-          {user?.is_admin && (
-            <Link
-              href="/admin"
-              className="flex items-center gap-1 text-indigo-600 hover:text-indigo-800 transition-colors font-semibold"
-            >
-              <Settings className="h-3.5 w-3.5" />
-              Admin
-            </Link>
-          )}
         </nav>
 
         {/* Right side */}
@@ -129,7 +120,7 @@ export default function Navbar() {
         </div>
       </div>
 
-      {/* Mobile menu */}
+      {/* Mobile menu — no admin link */}
       {mobileOpen && (
         <div className="md:hidden bg-white border-t">
           <div className="px-4 py-4 space-y-3">
@@ -147,15 +138,6 @@ export default function Navbar() {
             >
               Siparişlerim
             </Link>
-            {user?.is_admin && (
-              <Link
-                href="/admin"
-                className="block text-indigo-600 font-semibold"
-                onClick={() => setMobileOpen(false)}
-              >
-                Admin Panel
-              </Link>
-            )}
           </div>
         </div>
       )}

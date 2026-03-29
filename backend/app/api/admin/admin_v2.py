@@ -391,6 +391,25 @@ async def update_campaign(
                 ),
             )
 
+        # Guard: active → moq_reached requires real participant count >= moq
+        if old_status == "active" and new_status == "moq_reached":
+            count_res = await db.execute(
+                select(func.coalesce(func.sum(CampaignParticipant.quantity), 0))
+                .where(
+                    CampaignParticipant.campaign_id == campaign.id,
+                    CampaignParticipant.status.in_(["joined", "invited"]),
+                )
+            )
+            actual_count = int(count_res.scalar() or 0)
+            if actual_count < (campaign.moq or 0):
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"MOQ henüz dolmadı: {actual_count}/{campaign.moq} katılımcı. "
+                        "Gerçek katılımcı toplamı MOQ'ya ulaşmadan bu geçiş yapılamaz."
+                    ),
+                )
+
         campaign.status = new_status
 
         # Timestamp'leri güncelle
