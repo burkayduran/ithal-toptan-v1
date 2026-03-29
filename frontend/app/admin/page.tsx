@@ -1,39 +1,40 @@
 "use client";
 
 import Link from "next/link";
-import { useAdminCampaigns } from "@/features/admin/hooks";
-import { useAdminSuggestions } from "@/features/admin/hooks";
-import { Package, Tags, ClipboardList, ArrowRight } from "lucide-react";
+import { useDashboardSummary, useAdminSuggestions } from "@/features/admin/hooks";
+import {
+  Package, Tags, ClipboardList, ArrowRight,
+  TrendingUp, Users, ShoppingCart, CreditCard, BarChart3, Truck,
+} from "lucide-react";
+import { formatCurrency } from "@/lib/utils/formatCurrency";
 
 function StatCard({
   label,
   value,
   sub,
+  href,
 }: {
   label: string;
   value: number | string;
   sub?: string;
+  href?: string;
 }) {
-  return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5">
+  const inner = (
+    <div className={`bg-white rounded-xl border border-gray-200 p-5 ${href ? "hover:border-blue-300 hover:shadow-sm transition-all cursor-pointer" : ""}`}>
       <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{label}</p>
       <p className="mt-1 text-3xl font-bold text-gray-900">{value}</p>
       {sub && <p className="mt-1 text-xs text-gray-400">{sub}</p>}
     </div>
   );
+  if (href) return <Link href={href}>{inner}</Link>;
+  return inner;
 }
 
 export default function AdminDashboard() {
-  const { data: campaigns } = useAdminCampaigns();
+  const { data: summary, isLoading } = useDashboardSummary();
   const { data: pendingSuggestions } = useAdminSuggestions("pending");
 
-  const total = campaigns?.length ?? 0;
-  const draft = campaigns?.filter((p) => p.status === "draft").length ?? 0;
-  const active = campaigns?.filter((p) => p.status === "active").length ?? 0;
-  const pending = pendingSuggestions?.length ?? 0;
-  const moqReached = campaigns?.filter((p) => p.status === "moq_reached").length ?? 0;
-  const paymentCollecting = campaigns?.filter((p) => p.status === "payment_collecting").length ?? 0;
-  const ordered = campaigns?.filter((p) => p.status === "ordered").length ?? 0;
+  const pending = pendingSuggestions?.length ?? summary?.suggestions_pending ?? 0;
 
   const SHORTCUTS = [
     {
@@ -41,8 +42,8 @@ export default function AdminDashboard() {
       icon: Package,
       label: "Ürünler",
       desc: "Listele, ekle, yayınla",
-      count: total,
-      countLabel: "toplam ürün",
+      count: summary?.products_total ?? null,
+      countLabel: "ürün",
     },
     {
       href: "/admin/categories",
@@ -63,28 +64,93 @@ export default function AdminDashboard() {
   ];
 
   return (
-    <div className="p-8 max-w-4xl">
+    <div className="p-8 max-w-5xl">
       <h1 className="text-xl font-bold text-gray-900 mb-1">Dashboard</h1>
       <p className="text-sm text-gray-500 mb-8">Yönetim paneline hoş geldiniz.</p>
 
-      {/* Stats - Row 1 */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
-        <StatCard label="Toplam Ürün" value={total} />
-        <StatCard label="Yayında" value={active} />
-        <StatCard label="Taslak" value={draft} />
-        <StatCard label="Bekleyen İstek" value={pending} />
-      </div>
+      {isLoading ? (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="bg-white rounded-xl border border-gray-200 p-5 animate-pulse">
+              <div className="h-3 bg-gray-200 rounded w-2/3 mb-3" />
+              <div className="h-8 bg-gray-200 rounded w-1/3" />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <>
+          {/* Row 1: Core metrics */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+            <StatCard
+              label="Toplam Ürün"
+              value={summary?.products_total ?? 0}
+              href="/admin/products"
+            />
+            <StatCard
+              label="Aktif Kampanya"
+              value={summary?.campaigns_active ?? 0}
+              href="/admin/products?status=active"
+            />
+            <StatCard
+              label="Taslak"
+              value={summary?.campaigns_draft ?? 0}
+              href="/admin/products?status=draft"
+            />
+            <StatCard
+              label="Bekleyen İstek"
+              value={pending}
+              href="/admin/product-requests?status=pending"
+            />
+          </div>
 
-      {/* Stats - Row 2: Funnel */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-10">
-        <StatCard
-          label="MOQ Dolmuş"
-          value={moqReached}
-          sub={active > 0 ? `Aktif → MOQ: %${active > 0 ? Math.round((moqReached / active) * 100) : 0}` : undefined}
-        />
-        <StatCard label="Ödeme Toplanıyor" value={paymentCollecting} />
-        <StatCard label="Sipariş Verilmiş" value={ordered} />
-      </div>
+          {/* Row 2: Funnel */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+            <StatCard
+              label="MOQ Dolmuş"
+              value={summary?.campaigns_moq_reached ?? 0}
+              href="/admin/products?status=moq_reached"
+              sub="Ödeme aşamasına geç"
+            />
+            <StatCard
+              label="Ödeme Toplanıyor"
+              value={summary?.campaigns_payment_collecting ?? 0}
+              href="/admin/products?status=payment_collecting"
+            />
+            <StatCard
+              label="Sipariş Verilmiş"
+              value={summary?.campaigns_ordered ?? 0}
+              href="/admin/products?status=ordered"
+            />
+            <StatCard
+              label="Kargoda"
+              value={summary?.campaigns_shipped ?? 0}
+              href="/admin/products?status=shipped"
+            />
+          </div>
+
+          {/* Row 3: Demand + Revenue */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-10">
+            <StatCard
+              label="Toplam Talep"
+              value={summary?.demand_total ?? 0}
+              sub={`${summary?.demand_unique_users ?? 0} benzersiz kullanıcı`}
+            />
+            <StatCard
+              label="Son 30 Gün Talep"
+              value={summary?.demand_last_30d ?? 0}
+            />
+            <StatCard
+              label="Tahsil Edilen"
+              value={summary?.revenue_total_try ? formatCurrency(summary.revenue_total_try) : "₺0"}
+            />
+            <StatCard
+              label="Bekleyen Tahsilat"
+              value={summary?.pending_collection_try ? formatCurrency(summary.pending_collection_try) : "₺0"}
+              sub="Davet edilmiş katılımcılar"
+            />
+          </div>
+        </>
+      )}
 
       {/* Quick access */}
       <h2 className="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">

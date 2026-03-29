@@ -16,7 +16,10 @@ export default function AdminProductsPage() {
   const { mutate: bulkPublish, isPending: isBulkPublishing } = useBulkPublishCampaigns();
   const { mutate: bulkCancel, isPending: isBulkCancelling } = useBulkCancelCampaigns();
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState(() => {
+    if (typeof window === "undefined") return "all";
+    return new URLSearchParams(window.location.search).get("status") ?? "all";
+  });
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const filtered = (campaigns ?? []).filter((p) => {

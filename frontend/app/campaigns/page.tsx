@@ -22,7 +22,6 @@ const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
   { value: "active", label: "Aktif" },
   { value: "near_unlock", label: "Hedefe Yakın" },
   { value: "moq_reached", label: "Hedefe Ulaştı" },
-  { value: "payment_collecting", label: "Ödeme Aşaması" },
 ];
 
 const SORT_OPTIONS: { value: SortOption; label: string }[] = [

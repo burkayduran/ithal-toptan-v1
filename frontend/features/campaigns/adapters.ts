@@ -5,8 +5,7 @@ export type StatusFilter =
   | "all"
   | "active"
   | "near_unlock"
-  | "moq_reached"
-  | "payment_collecting";
+  | "moq_reached";
 
 export type SortOption = "near_unlock" | "newest" | "lowest_price";
 
@@ -15,7 +14,7 @@ export function filterCampaigns(
   { search, status }: { search: string; status: StatusFilter }
 ): Campaign[] {
   let result = campaigns.filter((c) =>
-    ["active", "moq_reached", "payment_collecting"].includes(c.status)
+    ["active", "moq_reached"].includes(c.status)
   );
 
   if (search.trim()) {
@@ -36,8 +35,6 @@ export function filterCampaigns(
       );
     case "moq_reached":
       return result.filter((c) => c.status === "moq_reached" && isCampaignReached(c));
-    case "payment_collecting":
-      return result.filter((c) => c.status === "payment_collecting");
     default:
       return result;
   }

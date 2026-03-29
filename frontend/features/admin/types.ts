@@ -139,3 +139,47 @@ export interface PricePreviewPayload {
   customs_rate?: number;
   margin_rate?: number;
 }
+
+export interface DashboardSummary {
+  // Campaign funnel
+  campaigns_total: number;
+  campaigns_draft: number;
+  campaigns_active: number;
+  campaigns_moq_reached: number;
+  campaigns_payment_collecting: number;
+  campaigns_ordered: number;
+  campaigns_shipped: number;
+  campaigns_delivered: number;
+  // Products
+  products_total: number;
+  // Demand
+  demand_total: number;
+  demand_unique_users: number;
+  demand_last_30d: number;
+  // Suggestions
+  suggestions_pending: number;
+  // Financial
+  revenue_total_try: number;
+  pending_collection_try: number;
+}
+
+export interface DemandEntry {
+  id: string;
+  campaign_id: string;
+  user_id: string;
+  user_email: string;
+  user_full_name: string | null;
+  quantity: number;
+  status: string;
+  admin_note: string | null;
+  removal_reason: string | null;
+  removed_at: string | null;
+  created_at: string;
+}
+
+export interface DemandEntriesResponse {
+  campaign_id: string;
+  total_active_quantity: number;
+  unique_active_users: number;
+  entries: DemandEntry[];
+}

@@ -15,7 +15,7 @@ from app.core.auth import get_current_active_user
 from app.core.limiter import limiter
 from app.db.session import get_db
 from app.models.models import (
-    Campaign, CampaignParticipant, Product, User,
+    Campaign, CampaignDemandEntry, CampaignParticipant, Product, User,
 )
 from app.schemas.v2_schemas import (
     CampaignProgress,
@@ -28,7 +28,7 @@ from app.schemas.v2_schemas import (
 router = APIRouter()
 
 # Statuses visible to public
-_PUBLIC_STATUSES = {"active", "moq_reached", "payment_collecting"}
+_PUBLIC_STATUSES = {"active", "moq_reached"}
 _DETAIL_STATUSES = {"active", "moq_reached", "payment_collecting", "ordered", "shipped", "delivered"}
 
 
@@ -433,6 +433,15 @@ async def join_campaign(
         )
         db.add(participant)
         await db.flush()
+
+    # Create demand entry for tracking
+    demand_entry = CampaignDemandEntry(
+        campaign_id=campaign_id,
+        user_id=current_user.id,
+        quantity=data.quantity,
+        status="active",
+    )
+    db.add(demand_entry)
 
     await db.commit()
     await db.refresh(participant)

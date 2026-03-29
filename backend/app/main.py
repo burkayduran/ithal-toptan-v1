@@ -1,6 +1,8 @@
 from contextlib import asynccontextmanager
+import os
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from uuid import UUID
 
 from slowapi import _rate_limit_exceeded_handler
@@ -50,6 +52,11 @@ app = FastAPI(
     redoc_url="/api/redoc",
     openapi_url="/api/openapi.json"
 )
+
+# Serve uploaded images
+_uploads_dir = "/app/uploads"
+os.makedirs(_uploads_dir, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=_uploads_dir), name="uploads")
 
 # Rate limiter
 app.state.limiter = limiter

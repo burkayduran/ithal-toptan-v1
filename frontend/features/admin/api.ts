@@ -10,6 +10,8 @@ import type {
   CategoryUpdatePayload,
   SuggestionUpdatePayload,
   PricePreviewPayload,
+  DashboardSummary,
+  DemandEntriesResponse,
 } from "./types";
 
 const ADMIN_V2 = "/api/v2/admin";
@@ -98,5 +100,47 @@ export function calculatePricePreview(payload: PricePreviewPayload): Promise<Pri
     shipping_cost_usd: payload.shipping_cost_usd ?? 0,
     customs_rate: payload.customs_rate ?? 0.35,
     margin_rate: payload.margin_rate ?? 0.30,
+  });
+}
+
+// ── Dashboard Summary ─────────────────────────────────────────────────────
+
+export function getDashboardSummary(): Promise<DashboardSummary> {
+  return api.get(`${ADMIN_V2}/dashboard-summary`);
+}
+
+// ── Demand Entries ───────────────────────────────────────────────────────
+
+export function getCampaignDemandEntries(campaignId: string): Promise<DemandEntriesResponse> {
+  return api.get(`${ADMIN_V2}/campaigns/${campaignId}/demand-entries`);
+}
+
+export function deleteDemandEntry(entryId: string, reason?: string): Promise<{ message: string }> {
+  const params = reason ? `?reason=${encodeURIComponent(reason)}` : "";
+  return api.delete(`${ADMIN_V2}/demand-entries/${entryId}${params}`);
+}
+
+export function updateDemandEntry(
+  entryId: string,
+  data: { admin_note?: string; status?: string }
+): Promise<{ id: string; status: string; admin_note: string | null }> {
+  return api.patch(`${ADMIN_V2}/demand-entries/${entryId}`, data);
+}
+
+export function uploadProductImage(file: File): Promise<{ url: string; filename: string }> {
+  const formData = new FormData();
+  formData.append("file", file);
+  // Use fetch directly to handle multipart/form-data with auth
+  const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
+  return fetch(`/api/v2/admin/uploads/image`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  }).then(async (res) => {
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || "Upload failed");
+    }
+    return res.json();
   });
 }

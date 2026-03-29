@@ -8,6 +8,9 @@ import {
   usePublishCampaign,
   useAdminCategories,
   useCalculatePrice,
+  useCampaignDemandEntries,
+  useDeleteDemandEntry,
+  useUploadProductImage,
 } from "@/features/admin/hooks";
 import type { AdminCampaign, AdminCategory } from "@/features/admin/types";
 import { useState, useCallback, useRef } from "react";
@@ -16,7 +19,7 @@ import { Input } from "@/components/ui/input";
 import { getStatusConfig, STATUS_ORDER } from "@/lib/config/campaignStatus";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, ArrowLeft, RefreshCw } from "lucide-react";
+import { Loader2, ArrowLeft, RefreshCw, Trash2, Upload } from "lucide-react";
 import Link from "next/link";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -75,6 +78,134 @@ function StatusSelect({
         </option>
       ))}
     </select>
+  );
+}
+
+function DemandEntriesSection({ campaignId }: { campaignId: string }) {
+  const { data, isLoading } = useCampaignDemandEntries(campaignId);
+  const { mutate: removeEntry, isPending: isRemoving } = useDeleteDemandEntry(campaignId);
+  const [removingId, setRemovingId] = useState<string | null>(null);
+
+  function handleRemove(entryId: string) {
+    if (!window.confirm("Bu talebi kaldırmak istediğinize emin misiniz?")) return;
+    setRemovingId(entryId);
+    removeEntry(
+      { entryId },
+      { onSettled: () => setRemovingId(null) }
+    );
+  }
+
+  if (isLoading) return (
+    <div className="bg-white rounded-xl border border-gray-200 p-5">
+      <h2 className="text-sm font-semibold text-gray-800 mb-3">Talepler</h2>
+      <p className="text-sm text-gray-400">Yükleniyor...</p>
+    </div>
+  );
+
+  const entries = data?.entries ?? [];
+  const activeEntries = entries.filter((e) => e.status !== "removed");
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-gray-800">Talepler</h2>
+        <div className="flex gap-4 text-xs text-gray-500">
+          <span><span className="font-semibold text-gray-700">{data?.total_active_quantity ?? 0}</span> toplam adet</span>
+          <span><span className="font-semibold text-gray-700">{data?.unique_active_users ?? 0}</span> benzersiz kullanıcı</span>
+        </div>
+      </div>
+
+      {activeEntries.length === 0 ? (
+        <p className="text-sm text-gray-400 py-4 text-center">Henüz talep bulunmuyor.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="text-left px-3 py-2 font-medium text-gray-600">Kullanıcı</th>
+                <th className="text-left px-3 py-2 font-medium text-gray-600">Adet</th>
+                <th className="text-left px-3 py-2 font-medium text-gray-600">Durum</th>
+                <th className="text-left px-3 py-2 font-medium text-gray-600">Tarih</th>
+                <th className="text-right px-3 py-2 font-medium text-gray-600">İşlem</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {activeEntries.map((entry) => (
+                <tr key={entry.id} className={entry.status === "flagged" ? "bg-amber-50" : ""}>
+                  <td className="px-3 py-2">
+                    <p className="font-medium text-gray-800">{entry.user_email}</p>
+                    {entry.user_full_name && (
+                      <p className="text-gray-400">{entry.user_full_name}</p>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-gray-700">{entry.quantity}</td>
+                  <td className="px-3 py-2">
+                    <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
+                      entry.status === "active" ? "bg-green-100 text-green-700" :
+                      entry.status === "flagged" ? "bg-amber-100 text-amber-700" :
+                      "bg-gray-100 text-gray-500"
+                    }`}>
+                      {entry.status}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-gray-400">
+                    {new Date(entry.created_at).toLocaleDateString("tr-TR")}
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 w-6 p-0 text-red-400 hover:text-red-600 hover:bg-red-50"
+                      disabled={isRemoving && removingId === entry.id}
+                      onClick={() => handleRemove(entry.id)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ImageUploadButton({ onUpload }: { onUpload: (url: string) => void }) {
+  const { mutate: upload, isPending } = useUploadProductImage();
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    upload(file, {
+      onSuccess: (data) => {
+        onUpload(data.url);
+      },
+      onError: (err) => {
+        alert(`Yükleme hatası: ${err.message}`);
+      },
+    });
+    // Reset input
+    e.target.value = "";
+  }
+
+  return (
+    <label className="mt-1.5 inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 cursor-pointer">
+      <input
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        className="hidden"
+        onChange={handleFileChange}
+        disabled={isPending}
+      />
+      {isPending ? (
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+      ) : (
+        <Upload className="h-3.5 w-3.5" />
+      )}
+      {isPending ? "Yükleniyor..." : "Görsel yükle"}
+    </label>
   );
 }
 
@@ -206,6 +337,7 @@ function EditForm({
   }
 
   return (
+    <>
     <form onSubmit={handleSubmit} className="space-y-5">
       {/* Basic campaign info */}
       <Section title="Ürün Bilgileri">
@@ -240,6 +372,14 @@ function EditForm({
             onChange={set("images")}
             rows={3}
             className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none font-mono resize-none"
+          />
+          <ImageUploadButton
+            onUpload={(url) =>
+              setForm((prev) => ({
+                ...prev,
+                images: prev.images ? `${prev.images}\n${url}` : url,
+              }))
+            }
           />
         </Field>
         <Field label="Durum">
@@ -354,6 +494,9 @@ function EditForm({
         )}
       </div>
     </form>
+    {/* Talepler — demand entries admin view */}
+    <DemandEntriesSection campaignId={campaign.id} />
+    </>
   );
 }
 

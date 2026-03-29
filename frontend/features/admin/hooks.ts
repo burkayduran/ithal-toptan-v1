@@ -14,6 +14,10 @@ import {
   getAdminSuggestions,
   updateAdminSuggestion,
   calculatePricePreview,
+  getDashboardSummary,
+  getCampaignDemandEntries,
+  deleteDemandEntry,
+  uploadProductImage,
 } from "./api";
 import type {
   CampaignCreatePayload,
@@ -163,5 +167,43 @@ export function useUpdateSuggestion() {
 export function useCalculatePrice() {
   return useMutation({
     mutationFn: (payload: PricePreviewPayload) => calculatePricePreview(payload),
+  });
+}
+
+// ── Dashboard Summary ─────────────────────────────────────────────────────
+
+export function useDashboardSummary() {
+  return useQuery({
+    queryKey: ["admin", "dashboard-summary"],
+    queryFn: getDashboardSummary,
+    staleTime: 30_000,
+  });
+}
+
+// ── Demand Entries ────────────────────────────────────────────────────────
+
+export function useCampaignDemandEntries(campaignId: string) {
+  return useQuery({
+    queryKey: ["admin", "demand-entries", campaignId],
+    queryFn: () => getCampaignDemandEntries(campaignId),
+    enabled: !!campaignId,
+  });
+}
+
+export function useDeleteDemandEntry(campaignId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ entryId, reason }: { entryId: string; reason?: string }) =>
+      deleteDemandEntry(entryId, reason),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "demand-entries", campaignId] });
+      qc.invalidateQueries({ queryKey: ["admin", "campaigns"] });
+    },
+  });
+}
+
+export function useUploadProductImage() {
+  return useMutation({
+    mutationFn: (file: File) => uploadProductImage(file),
   });
 }

@@ -574,3 +574,38 @@ class ParticipantStatusHistory(Base):
     __table_args__ = (
         Index("idx_participant_history_participant", "participant_id", "created_at"),
     )
+
+
+# ─── NEW DOMAIN: CampaignDemandEntry ──────────────────────────────────────────
+
+class CampaignDemandEntry(Base):
+    """
+    Per-demand tracking layer. One row per user demand action.
+    CampaignParticipant remains the aggregate (total quantity, status).
+    """
+    __tablename__ = "campaign_demand_entries"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    campaign_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("campaigns.id"), nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    quantity: Mapped[int] = mapped_column(Integer, default=1)
+
+    # Status: active → removed / flagged / converted
+    status: Mapped[str] = mapped_column(String(20), default="active", index=True)
+
+    # Admin management
+    removed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    removed_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+    removal_reason: Mapped[Optional[str]] = mapped_column(Text)
+    admin_note: Mapped[Optional[str]] = mapped_column(Text)
+
+    # Metadata
+    ip_address: Mapped[Optional[str]] = mapped_column(String(50))
+    user_agent: Mapped[Optional[str]] = mapped_column(String(500))
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index("idx_demand_entry_campaign_user", "campaign_id", "user_id"),
+        Index("idx_demand_entry_status", "campaign_id", "status"),
+    )

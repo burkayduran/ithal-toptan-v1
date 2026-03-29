@@ -28,18 +28,11 @@ export default function HomePage() {
     campaigns?.filter((p) => p.status === "active") ?? [];
   const moqReachedCampaigns =
     campaigns?.filter((p) => p.status === "moq_reached" && isCampaignReached(p)) ?? [];
-  const paymentCollectingCampaigns =
-    campaigns?.filter((p) => p.status === "payment_collecting") ?? [];
-
   const nearUnlock = activeCampaigns.filter(
     (p) => (p.moq_fill_percentage ?? 0) >= 60
   );
 
-  const featured =
-    activeCampaigns[0] ??
-    moqReachedCampaigns[0] ??
-    paymentCollectingCampaigns[0] ??
-    null;
+  const featured = activeCampaigns[0] ?? moqReachedCampaigns[0] ?? null;
 
   const hasAnyCampaigns = (campaigns?.length ?? 0) > 0;
 
@@ -238,20 +231,6 @@ export default function HomePage() {
               </section>
             )}
 
-            {/* ── Payment Collecting ── */}
-            {paymentCollectingCampaigns.length > 0 && (
-              <section className="py-16 bg-white">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                  <SectionHeader
-                    title="Ödeme Aşamasında"
-                    subtitle="Bu kampanyalar için ödeme toplanıyor"
-                    icon={CreditCard}
-                    iconColor="bg-amber-500"
-                  />
-                  <CampaignGrid campaigns={paymentCollectingCampaigns} />
-                </div>
-              </section>
-            )}
           </>
         )}
       </div>
