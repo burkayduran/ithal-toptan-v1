@@ -25,14 +25,35 @@ backend/    FastAPI + SQLAlchemy (async) + PostgreSQL + Redis
 ```bash
 # 1. Env dosyasını hazırla
 cp backend/.env.example backend/.env
-# Gerekirse düzenle
+# Gerekirse düzenle (özellikle RESEND_API_KEY ve SECRET_KEY)
 
-# 2. Tüm servisleri başlat
+# 2. Servisleri başlat (migration otomatik çalışır)
 docker compose up -d
 
 # API:      http://localhost:8000
 # API Docs: http://localhost:8000/api/docs
-# Frontend: http://localhost:3000
+# Frontend: http://localhost:3000 (ayrı adımla — aşağıya bakın)
+
+# 3. Demo veri yükle (opsiyonel — kampanyaları doldurmak için)
+docker compose exec api python scripts/seed.py
+
+# 4. Admin kullanıcı oluştur
+docker compose exec api python scripts/create_admin.py admin@example.com MySecret123
+# Sonra: http://localhost:3000 → "Giriş Yap" → admin@example.com / MySecret123
+# Admin panel: http://localhost:3000/admin
+```
+
+> **Not:** API container her başladığında `alembic upgrade head` çalışır, DB tabloları otomatik oluşur.
+
+### Frontend (ayrı terminalde)
+
+Frontend docker-compose'da yer almaz — yerel olarak çalıştırılır:
+
+```bash
+cd frontend
+cp .env.local.example .env.local  # NEXT_PUBLIC_API_URL=http://localhost:8000
+npm install
+npm run dev        # http://localhost:3000
 ```
 
 ### Local Dev (Docker olmadan)
@@ -51,31 +72,27 @@ source venv/bin/activate        # Windows: venv\Scripts\activate
 
 # 3. Bağımlılıkları yükle
 pip install -r requirements.txt
-# Geliştirme araçları için (opsiyonel):
-# pip install -r requirements-dev.txt
 
-# 4. Database başlat (PostgreSQL çalışıyor olmalı)
+# 4. DB oluştur ve migration çalıştır
 createdb toplu_alisveris
+alembic upgrade head
 
-# 5. API server
+# 5. Demo veri (opsiyonel)
+python scripts/seed.py
+
+# 6. Admin kullanıcı oluştur
+python scripts/create_admin.py admin@example.com MySecret123
+
+# 7. API server
 uvicorn app.main:app --reload --port 8000
 
-# 6. Celery worker (ayrı terminal)
+# 8. Celery worker (ayrı terminal, e-posta görevleri için)
 celery -A app.tasks.celery_app worker --loglevel=info
-
-# 7. Celery beat — zamanlanmış görevler (ayrı terminal)
-celery -A app.tasks.celery_app beat --loglevel=info
 
 # ── Frontend ─────────────────────────────────────────────────────────────────
 cd frontend
-
-# 1. Env dosyasını hazırla
 cp .env.local.example .env.local
-
-# 2. Bağımlılıkları yükle
 npm install
-
-# 3. Dev server başlat
 npm run dev        # http://localhost:3000
 ```
 
@@ -162,18 +179,19 @@ draft → active → moq_reached → payment_collecting → ordered → shipped 
 ```bash
 cd backend
 
-# Syntax kontrolü
+# Syntax kontrolü (DB gerekmez)
 python -m compileall app/
 
-# Import testi (env gerekli)
-SECRET_KEY=test DATABASE_URL=postgresql+asyncpg://localhost/test \
-  python -c "from app.main import app; print('OK')"
+# Pure logic testleri — DB/Redis gerekmez, her ortamda çalışır
+python -m pytest tests/test_smoke_pure.py -v --noconftest
 
-# Unit/integration testleri
-pytest tests/ -v
-
-# Belirli bir modül
-pytest tests/test_campaigns.py -v
+# Integration testleri — PostgreSQL + Redis gerekir
+# docker-compose.test.yml ile hafif test ortamı kaldır:
+docker compose -f ../docker-compose.test.yml up -d
+TEST_DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5433/toplu_test \
+  REDIS_URL=redis://localhost:6380/0 \
+  python -m pytest tests/ -v
+docker compose -f ../docker-compose.test.yml down -v
 ```
 
 ---
@@ -231,3 +249,17 @@ sudo lsof -i :5432   # PostgreSQL portu
 docker compose down -v
 docker compose up -d
 ```
+
+### Mevcut DB var, alembic versiyonu yok
+Eğer tablolar elle oluşturulmuşsa ve alembic_version tablosu yoksa:
+```bash
+docker compose exec api alembic stamp head
+docker compose restart api
+```
+
+### Admin panele giriş yapamıyorum
+Admin kullanıcısını oluştur veya mevcut kullanıcıyı yükselt:
+```bash
+docker compose exec api python scripts/create_admin.py email@example.com YeniSifre123
+```
+Ardından frontend'den bu e-posta ve şifreyle giriş yap → `/admin` sayfasına git.
