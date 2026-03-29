@@ -28,7 +28,7 @@ cp backend/.env.example backend/.env
 # Gerekirse düzenle (özellikle RESEND_API_KEY ve SECRET_KEY)
 
 # 2. Servisleri başlat (migration otomatik çalışır)
-docker compose up -d
+docker compose up --build -d
 
 # API:      http://localhost:8000
 # API Docs: http://localhost:8000/api/docs
