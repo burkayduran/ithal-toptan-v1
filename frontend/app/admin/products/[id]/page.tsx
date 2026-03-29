@@ -13,6 +13,7 @@ import type { AdminCampaign, AdminCategory } from "@/features/admin/types";
 import { useState, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { getStatusConfig, STATUS_ORDER } from "@/lib/config/campaignStatus";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, ArrowLeft, RefreshCw } from "lucide-react";
@@ -47,16 +48,7 @@ const ALLOWED_TRANSITIONS: Record<string, string[]> = {
   cancelled: [],
 };
 
-const STATUS_LABELS: Record<string, string> = {
-  draft: "Taslak",
-  active: "Aktif",
-  moq_reached: "MOQ Doldu",
-  payment_collecting: "Ödeme Toplanıyor",
-  ordered: "Sipariş Verildi",
-  shipped: "Kargoda",
-  delivered: "Teslim Edildi",
-  cancelled: "İptal",
-};
+// Derived from central config — no local STATUS_LABELS needed
 
 function StatusSelect({
   currentStatus,
@@ -79,7 +71,7 @@ function StatusSelect({
     >
       {options.map((s) => (
         <option key={s} value={s}>
-          {STATUS_LABELS[s] ?? s}
+          {getStatusConfig(s).adminLabel}
         </option>
       ))}
     </select>
@@ -167,7 +159,6 @@ function EditForm({
         );
         if (!confirmed) return;
       }
-      const STATUS_ORDER = ["draft", "active", "moq_reached", "payment_collecting", "ordered", "shipped", "delivered"];
       const oldIdx = STATUS_ORDER.indexOf(campaign.status);
       const newIdx = STATUS_ORDER.indexOf(form.status);
       if (

@@ -8,18 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Search, Loader2 } from "lucide-react";
-
-const STATUS_LABEL: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
-  draft: { label: "Taslak", variant: "secondary" },
-  active: { label: "Aktif", variant: "default" },
-  moq_reached: { label: "MOQ Doldu", variant: "default" },
-  payment_collecting: { label: "Ödeme", variant: "default" },
-  ordered: { label: "Sipariş", variant: "outline" },
-  shipped: { label: "Kargoda", variant: "outline" },
-  delivered: { label: "Teslim", variant: "outline" },
-  cancelled: { label: "İptal", variant: "destructive" },
-  failed:    { label: "Başarısız", variant: "destructive" },
-};
+import { getStatusConfig, STATUS_ORDER } from "@/lib/config/campaignStatus";
 
 export default function AdminProductsPage() {
   const { data: campaigns, isLoading, isError, refetch } = useAdminCampaigns();
@@ -99,14 +88,9 @@ export default function AdminProductsPage() {
           className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:outline-none"
         >
           <option value="all">Tüm Durumlar</option>
-          <option value="draft">Taslak</option>
-          <option value="active">Aktif</option>
-          <option value="moq_reached">MOQ Doldu</option>
-          <option value="payment_collecting">Ödeme</option>
-          <option value="ordered">Sipariş</option>
-          <option value="shipped">Kargoda</option>
-          <option value="delivered">Teslim</option>
-          <option value="cancelled">İptal</option>
+          {STATUS_ORDER.filter((s) => s !== "failed").map((s) => (
+            <option key={s} value={s}>{getStatusConfig(s).adminLabel}</option>
+          ))}
         </select>
       </div>
 
@@ -169,7 +153,7 @@ export default function AdminProductsPage() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filtered.map((p) => {
-                const meta = STATUS_LABEL[p.status] ?? { label: p.status, variant: "outline" as const };
+                const meta = getStatusConfig(p.status);
                 const isThisPublishing = isPublishing && publishingId === p.id;
                 return (
                   <tr key={p.id} className="hover:bg-gray-50 transition-colors">
@@ -185,7 +169,7 @@ export default function AdminProductsPage() {
                       <p className="font-medium text-gray-900 line-clamp-1">{p.title}</p>
                     </td>
                     <td className="px-4 py-3 hidden md:table-cell">
-                      <Badge variant={meta.variant} className="text-xs">{meta.label}</Badge>
+                      <Badge variant={meta.badgeVariant} className="text-xs">{meta.adminLabel}</Badge>
                     </td>
                     <td className="px-4 py-3 text-right text-gray-600 hidden lg:table-cell">
                       {p.selling_price_try != null ? formatCurrency(p.selling_price_try) : "—"}

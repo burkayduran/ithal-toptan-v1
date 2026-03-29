@@ -8,7 +8,9 @@ Usage (from repo root):
     cd backend && python scripts/seed.py
 
 Demo accounts created:
-    demo@example.com / DemoSifre123  (regular user, 30 participants on moq_reached campaign)
+    demo@example.com / DemoSifre123  (regular user)
+      - 30 × invited  on moq_reached campaign (Bambu Masa Organizeri)
+      - 20 × paid     on payment_collecting campaign (Mekanik Klavye)
 """
 import asyncio
 import os
@@ -81,9 +83,21 @@ PRODUCTS = [
             "https://images.unsplash.com/photo-1593642632559-0c6d3fc62b89?w=800&q=80"
         ],
     },
+    {
+        "id": uuid.UUID("00000000-0000-0000-0001-000000000003"),
+        "title": "Mekanik Klavye TKL",
+        "description": (
+            "87 tuşlu tenkeyless mekanik klavye. "
+            "Kırmızı switch, RGB aydınlatma, alüminyum kasa, USB-C bağlantı."
+        ),
+        "category_slug": "elektronik",
+        "images": [
+            "https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=800&q=80"
+        ],
+    },
 ]
 
-# MOQ = 30, demo user accounts for 30 units → count matches MOQ exactly
+# Campaigns: active (0/50), moq_reached (30/30), payment_collecting (20/20 paid)
 CAMPAIGNS = [
     {
         "id": uuid.UUID("00000000-0000-0000-0002-000000000001"),
@@ -112,8 +126,24 @@ CAMPAIGNS = [
         "lead_time_days": 14,
         "activated_at": datetime(2026, 2, 15, tzinfo=timezone.utc),
         "moq_reached_at": datetime(2026, 3, 10, tzinfo=timezone.utc),
-        # demo user covers all 30 units so count == moq, no inconsistency
+        # demo user covers all 30 units so count == moq
         "demo_participants": {"user_id": DEMO_USER_ID, "quantity": 30, "status": "invited"},
+    },
+    {
+        "id": uuid.UUID("00000000-0000-0000-0002-000000000003"),
+        "product_id": uuid.UUID("00000000-0000-0000-0001-000000000003"),
+        "status": "payment_collecting",
+        "moq": 20,
+        "selling_price_try_snapshot": 2499.0,
+        "unit_price_usd_snapshot": 42.00,
+        "shipping_cost_usd_snapshot": 80.0,
+        "margin_rate_snapshot": 0.20,
+        "fx_rate_snapshot": 38.0,
+        "lead_time_days": 28,
+        "activated_at": datetime(2026, 2, 1, tzinfo=timezone.utc),
+        "moq_reached_at": datetime(2026, 2, 20, tzinfo=timezone.utc),
+        # demo user paid for all 20 units
+        "demo_participants": {"user_id": DEMO_USER_ID, "quantity": 20, "status": "paid"},
     },
 ]
 
@@ -229,6 +259,11 @@ async def main() -> None:
     print("Demo accounts:")
     print("  demo@example.com / DemoSifre123  (regular user)")
     print("  Run create_admin.py to create an admin account.")
+    print()
+    print("Campaigns seeded:")
+    print("  [active]             USB-C Hub 7-in-1         (0/50 — no participants)")
+    print("  [moq_reached]        Bambu Masa Organizeri    (30/30 — demo user invited)")
+    print("  [payment_collecting] Mekanik Klavye TKL       (20/20 — demo user paid)")
 
 
 if __name__ == "__main__":

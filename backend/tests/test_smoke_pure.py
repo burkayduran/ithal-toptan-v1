@@ -9,6 +9,8 @@ Covers:
   4. ordered → shipped → delivered transition chain accepted by ALLOWED_TRANSITIONS
   5. failed campaign in DB → API response reads safely (str field, no crash)
   6. SSE allowed statuses include shipped
+  7. MOQ guard logic (is_moq_reached pure equivalent)
+  8. isCampaignReached equivalent logic
 """
 import os
 import typing
@@ -200,3 +202,110 @@ class TestSSEAllowedStatuses:
         from app.main import _SSE_ALLOWED_STATUSES
         expected = {"active", "moq_reached", "payment_collecting", "ordered", "shipped", "delivered"}
         assert _SSE_ALLOWED_STATUSES == expected
+
+
+# ─── 7. MOQ guard logic ───────────────────────────────────────────────────────
+
+class TestMOQGuardLogic:
+    """
+    Pure logic tests for the is_moq_reached business rule.
+    Mirrors the logic in app/services/campaign_helpers.py without DB calls.
+    """
+
+    def _is_moq_reached(self, count: int, moq: int) -> tuple[int, bool]:
+        """Pure equivalent of the DB helper — count >= moq."""
+        return count, count >= moq
+
+    def test_count_equals_moq(self):
+        count, reached = self._is_moq_reached(30, 30)
+        assert count == 30
+        assert reached is True
+
+    def test_count_exceeds_moq(self):
+        _, reached = self._is_moq_reached(35, 30)
+        assert reached is True
+
+    def test_count_below_moq(self):
+        count, reached = self._is_moq_reached(15, 30)
+        assert count == 15
+        assert reached is False
+
+    def test_zero_count(self):
+        _, reached = self._is_moq_reached(0, 30)
+        assert reached is False
+
+    def test_moq_one(self):
+        _, reached = self._is_moq_reached(1, 1)
+        assert reached is True
+
+    def test_moq_zero_edge(self):
+        """MOQ of 0 — any count (including 0) reaches it."""
+        _, reached = self._is_moq_reached(0, 0)
+        assert reached is True
+
+    def test_guard_blocks_below_moq(self):
+        """Simulate the admin transition guard: raise if not reached."""
+        def guard(count: int, moq: int) -> None:
+            _, reached = self._is_moq_reached(count, moq)
+            if not reached:
+                raise ValueError(f"MOQ henüz dolmadı: {count}/{moq}")
+
+        with pytest.raises(ValueError, match="MOQ henüz dolmadı: 15/30"):
+            guard(15, 30)
+
+    def test_guard_allows_at_moq(self):
+        def guard(count: int, moq: int) -> None:
+            _, reached = self._is_moq_reached(count, moq)
+            if not reached:
+                raise ValueError(f"MOQ henüz dolmadı: {count}/{moq}")
+
+        guard(30, 30)  # should not raise
+
+
+# ─── 8. isCampaignReached equivalent logic ───────────────────────────────────
+
+class TestIsCampaignReachedLogic:
+    """
+    Pure Python tests mirroring the TypeScript isCampaignReached() in
+    frontend/lib/utils/campaign.ts — same business rule, verified here.
+    """
+
+    def _is_campaign_reached(self, moq, current_participant_count) -> bool:
+        """Python mirror of the TypeScript isCampaignReached()."""
+        if moq is None or current_participant_count is None:
+            return False
+        return current_participant_count >= moq
+
+    def test_count_equals_moq(self):
+        assert self._is_campaign_reached(30, 30) is True
+
+    def test_count_above_moq(self):
+        assert self._is_campaign_reached(30, 35) is True
+
+    def test_count_below_moq(self):
+        assert self._is_campaign_reached(30, 15) is False
+
+    def test_moq_none_returns_false(self):
+        assert self._is_campaign_reached(None, 30) is False
+
+    def test_count_none_returns_false(self):
+        assert self._is_campaign_reached(30, None) is False
+
+    def test_both_none_returns_false(self):
+        assert self._is_campaign_reached(None, None) is False
+
+    def test_zero_count_not_reached(self):
+        assert self._is_campaign_reached(30, 0) is False
+
+    def test_moq_reached_status_with_zero_count_is_not_reached(self):
+        """
+        Defends against the '0/30 Hedefe Ulaştı' bug:
+        status == moq_reached but count == 0 → NOT reached per count check.
+        Frontend must use isCampaignReached() not status string alone.
+        """
+        # Simulate: campaign.status == "moq_reached" but stale count data
+        status = "moq_reached"
+        result = self._is_campaign_reached(30, 0)
+        # status says reached but count says no — count wins
+        assert result is False
+        assert status == "moq_reached"  # status untouched, but UI should use count

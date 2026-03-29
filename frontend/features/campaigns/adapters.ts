@@ -1,4 +1,5 @@
 import { Campaign } from "./types";
+import { isCampaignReached } from "@/lib/utils/campaign";
 
 export type StatusFilter =
   | "all"
@@ -34,7 +35,7 @@ export function filterCampaigns(
         (c) => c.status === "active" && (c.moq_fill_percentage ?? 0) >= 60
       );
     case "moq_reached":
-      return result.filter((c) => c.status === "moq_reached");
+      return result.filter((c) => c.status === "moq_reached" && isCampaignReached(c));
     case "payment_collecting":
       return result.filter((c) => c.status === "payment_collecting");
     default:

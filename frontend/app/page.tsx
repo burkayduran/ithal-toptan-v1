@@ -19,21 +19,15 @@ import {
   TrendingUp,
   CreditCard,
 } from "lucide-react";
+import { isCampaignReached } from "@/lib/utils/campaign";
 
 export default function HomePage() {
   const { data: campaigns, isLoading, isError, refetch } = useCampaigns();
 
   const activeCampaigns =
     campaigns?.filter((p) => p.status === "active") ?? [];
-  // Defensive: also require real count >= moq to avoid "0/30 Hedefe Ulaştı" edge case
   const moqReachedCampaigns =
-    campaigns?.filter(
-      (p) =>
-        p.status === "moq_reached" &&
-        p.moq != null &&
-        p.current_participant_count != null &&
-        p.current_participant_count >= p.moq
-    ) ?? [];
+    campaigns?.filter((p) => p.status === "moq_reached" && isCampaignReached(p)) ?? [];
   const paymentCollectingCampaigns =
     campaigns?.filter((p) => p.status === "payment_collecting") ?? [];
 

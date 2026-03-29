@@ -3,6 +3,7 @@ import Image from "next/image";
 import { Sparkles, TrendingUp } from "lucide-react";
 import { Campaign } from "@/features/campaigns/types";
 import { formatCurrency } from "@/lib/utils/formatCurrency";
+import { isCampaignReached } from "@/lib/utils/campaign";
 import ProgressBlock from "./ProgressBlock";
 
 interface CampaignCardProps {
@@ -26,9 +27,7 @@ export default function CampaignCard({ campaign }: CampaignCardProps) {
       )
     : 0;
 
-  // isReached: count-based, not status-based. Guards "Hazır!" badge and CTA.
-  // A campaign can have moq_reached status but stale/zero count — defensive.
-  const isReached = canShowProgress && campaign.current_participant_count! >= campaign.moq!;
+  const isReached = isCampaignReached(campaign);
   const isNearTarget = percentage >= 70 && !isReached;
   // Show "Talep Oluştur" CTA only when status agrees AND count truly confirms it.
   const showCta = campaign.status === "moq_reached" && isReached;

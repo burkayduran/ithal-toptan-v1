@@ -19,6 +19,7 @@ from app.models.models import (
     Campaign, CampaignParticipant, CampaignStatusHistory,
     Category, Product, ProductSuggestion, SupplierOffer, User,
 )
+from app.services.campaign_helpers import is_moq_reached
 from app.schemas.v2_schemas import (
     AdminCampaignDetailResponse,
     CampaignCreatePayload,
@@ -391,17 +392,10 @@ async def update_campaign(
                 ),
             )
 
-        # Guard: active → moq_reached requires real participant count >= moq
+        # Guard: active → moq_reached requires real DB participant count >= moq
         if old_status == "active" and new_status == "moq_reached":
-            count_res = await db.execute(
-                select(func.coalesce(func.sum(CampaignParticipant.quantity), 0))
-                .where(
-                    CampaignParticipant.campaign_id == campaign.id,
-                    CampaignParticipant.status.in_(["joined", "invited"]),
-                )
-            )
-            actual_count = int(count_res.scalar() or 0)
-            if actual_count < (campaign.moq or 0):
+            actual_count, reached = await is_moq_reached(db, campaign.id, campaign.moq or 0)
+            if not reached:
                 raise HTTPException(
                     status_code=400,
                     detail=(
