@@ -12,6 +12,9 @@ import type {
   PricePreviewPayload,
   DashboardSummary,
   DemandEntriesResponse,
+  DemandUsersResponse,
+  FraudWatchResponse,
+  ActionItemsResponse,
 } from "./types";
 
 const ADMIN_V2 = "/api/v2/admin";
@@ -125,6 +128,24 @@ export function updateDemandEntry(
   data: { admin_note?: string; status?: string }
 ): Promise<{ id: string; status: string; admin_note: string | null }> {
   return api.patch(`${ADMIN_V2}/demand-entries/${entryId}`, data);
+}
+
+// ── Demand Users ─────────────────────────────────────────────────────────────
+
+export function getDemandUsers(sort = "quantity_desc"): Promise<DemandUsersResponse> {
+  return api.get(`${ADMIN_V2}/demand-users?sort=${encodeURIComponent(sort)}`);
+}
+
+// ── Fraud Watch ───────────────────────────────────────────────────────────────
+
+export function getFraudWatch(): Promise<FraudWatchResponse> {
+  return api.get(`${ADMIN_V2}/fraud-watch`);
+}
+
+// ── Action Items ──────────────────────────────────────────────────────────────
+
+export function getActionItems(): Promise<ActionItemsResponse> {
+  return api.get(`${ADMIN_V2}/action-items`);
 }
 
 export function uploadProductImage(file: File): Promise<{ url: string; filename: string }> {

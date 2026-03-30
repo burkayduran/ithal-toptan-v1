@@ -183,3 +183,110 @@ export interface DemandEntriesResponse {
   unique_active_users: number;
   entries: DemandEntry[];
 }
+
+// ── Demand Users (user-level aggregate) ──────────────────────────────────────
+
+export interface DemandUser {
+  user_id: string;
+  email: string;
+  full_name: string | null;
+  total_entries: number;
+  total_quantity: number;
+  unique_campaigns: number;
+  max_single_entry_qty: number;
+  last_activity: string | null;
+  flagged_count: number;
+  removed_count: number;
+}
+
+export interface DemandUsersResponse {
+  users: DemandUser[];
+  total: number;
+}
+
+// ── Fraud Watch ───────────────────────────────────────────────────────────────
+
+export type FraudRiskLevel = "watch" | "high" | "critical";
+
+export interface FraudWatchEntry {
+  user_id: string;
+  email: string;
+  full_name: string | null;
+  campaign_id: string;
+  campaign_title: string;
+  campaign_moq: number;
+  campaign_status: string;
+  user_total_quantity: number;
+  percent_of_moq: number;
+  entry_count: number;
+  flagged_count: number;
+  removed_count: number;
+  last_activity: string | null;
+  risk_level: FraudRiskLevel;
+  risk_reasons: string[];
+}
+
+export interface FraudWatchResponse {
+  entries: FraudWatchEntry[];
+  total: number;
+  threshold_pct: number;
+}
+
+// ── Action Items ──────────────────────────────────────────────────────────────
+
+export interface MoqStalledItem {
+  campaign_id: string;
+  title: string;
+  moq: number;
+  moq_reached_at: string | null;
+}
+
+export interface PaymentCollectingItem {
+  campaign_id: string;
+  title: string;
+  moq: number;
+  payment_deadline: string | null;
+}
+
+export interface NearMoqItem {
+  campaign_id: string;
+  title: string;
+  fill_pct: number;
+  current_qty: number;
+  moq: number;
+}
+
+export interface TrendingItem {
+  campaign_id: string;
+  title: string;
+  entry_count: number;
+  qty_sum: number;
+}
+
+export interface TopDemandItem {
+  campaign_id: string;
+  title: string;
+  qty_sum: number;
+}
+
+export interface ModeratedEntry {
+  entry_id: string;
+  campaign_id: string;
+  campaign_title: string;
+  user_email: string;
+  quantity: number;
+  status: string;
+  admin_note: string | null;
+  removal_reason: string | null;
+  removed_at: string | null;
+  created_at: string;
+}
+
+export interface ActionItemsResponse {
+  moq_stalled: MoqStalledItem[];
+  payment_collecting: PaymentCollectingItem[];
+  near_moq_active: NearMoqItem[];
+  trending_24h: TrendingItem[];
+  top_demand_30d: TopDemandItem[];
+  recent_moderated: ModeratedEntry[];
+}

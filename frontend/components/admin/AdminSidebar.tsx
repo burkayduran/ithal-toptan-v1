@@ -9,6 +9,8 @@ import {
   Tags,
   ClipboardList,
   ChevronRight,
+  Users,
+  ShieldAlert,
 } from "lucide-react";
 
 const NAV = [
@@ -19,6 +21,18 @@ const NAV = [
     href: "/admin/product-requests",
     label: "Ürün İstekleri",
     icon: ClipboardList,
+    exact: false,
+  },
+  {
+    href: "/admin/demand-users",
+    label: "Demand Users",
+    icon: Users,
+    exact: false,
+  },
+  {
+    href: "/admin/fraud-watch",
+    label: "Fraud Watch",
+    icon: ShieldAlert,
     exact: false,
   },
 ];

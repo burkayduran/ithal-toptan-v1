@@ -10,7 +10,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Request
 from fastapi.responses import JSONResponse
-from sqlalchemy import func, select, and_, distinct
+from sqlalchemy import func, select, and_, distinct, case, Integer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import require_admin
@@ -991,6 +991,414 @@ async def delete_category(
             status_code=409,
             detail="Bu kategoriye atanmış ürünler var. Önce ürünleri taşıyın."
         )
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# DEMAND USERS — kullanıcı bazlı aggregate talep analizi
+# ══════════════════════════════════════════════════════════════════════════
+
+@router.get("/demand-users")
+async def list_demand_users(
+    sort: str = Query("quantity_desc", description="quantity_desc | recent | campaigns | flagged"),
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Kullanıcı bazında aggregate demand istatistikleri."""
+    # Aggregate per user
+    agg_result = await db.execute(
+        select(
+            CampaignDemandEntry.user_id,
+            func.count(CampaignDemandEntry.id).label("total_entries"),
+            func.coalesce(func.sum(CampaignDemandEntry.quantity), 0).label("total_quantity"),
+            func.count(distinct(CampaignDemandEntry.campaign_id)).label("unique_campaigns"),
+            func.max(CampaignDemandEntry.quantity).label("max_single_entry_qty"),
+            func.max(CampaignDemandEntry.created_at).label("last_activity"),
+            func.sum(
+                case((CampaignDemandEntry.status == "flagged", 1), else_=0)
+            ).label("flagged_count"),
+            func.sum(
+                case((CampaignDemandEntry.status == "removed", 1), else_=0)
+            ).label("removed_count"),
+        )
+        .group_by(CampaignDemandEntry.user_id)
+    )
+    rows = agg_result.all()
+
+    if not rows:
+        return {"users": [], "total": 0}
+
+    user_ids = [r.user_id for r in rows]
+    user_result = await db.execute(
+        select(User.id, User.email, User.full_name)
+        .where(User.id.in_(user_ids))
+    )
+    user_map = {u.id: {"email": u.email, "full_name": u.full_name} for u in user_result.all()}
+
+    users = []
+    for r in rows:
+        info = user_map.get(r.user_id, {})
+        users.append({
+            "user_id": str(r.user_id),
+            "email": info.get("email", ""),
+            "full_name": info.get("full_name"),
+            "total_entries": int(r.total_entries),
+            "total_quantity": int(r.total_quantity),
+            "unique_campaigns": int(r.unique_campaigns),
+            "max_single_entry_qty": int(r.max_single_entry_qty or 0),
+            "last_activity": r.last_activity.isoformat() if r.last_activity else None,
+            "flagged_count": int(r.flagged_count or 0),
+            "removed_count": int(r.removed_count or 0),
+        })
+
+    # Sort
+    if sort == "quantity_desc":
+        users.sort(key=lambda x: x["total_quantity"], reverse=True)
+    elif sort == "recent":
+        users.sort(key=lambda x: x["last_activity"] or "", reverse=True)
+    elif sort == "campaigns":
+        users.sort(key=lambda x: x["unique_campaigns"], reverse=True)
+    elif sort == "flagged":
+        users.sort(key=lambda x: x["flagged_count"], reverse=True)
+
+    return {"users": users, "total": len(users)}
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# FRAUD WATCH — MOQ %10+ risk tespiti
+# ══════════════════════════════════════════════════════════════════════════
+
+FRAUD_WATCH_THRESHOLD = 0.10   # %10
+FRAUD_HIGH_THRESHOLD = 0.20    # %20
+FRAUD_CRITICAL_THRESHOLD = 0.30  # %30
+
+@router.get("/fraud-watch")
+async def get_fraud_watch(
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    MOQ'nun %10+'unu tek başına alan kullanıcıları ve diğer fraud sinyallerini döndür.
+    Eşik: user_total_quantity >= campaign.moq * 0.10
+    """
+    # Per user-campaign aggregate
+    agg_result = await db.execute(
+        select(
+            CampaignDemandEntry.user_id,
+            CampaignDemandEntry.campaign_id,
+            func.sum(CampaignDemandEntry.quantity).label("user_total_qty"),
+            func.count(CampaignDemandEntry.id).label("entry_count"),
+            func.sum(
+                case((CampaignDemandEntry.status == "flagged", 1), else_=0)
+            ).label("flagged_count"),
+            func.sum(
+                case((CampaignDemandEntry.status == "removed", 1), else_=0)
+            ).label("removed_count"),
+            func.max(CampaignDemandEntry.created_at).label("last_activity"),
+        )
+        .group_by(CampaignDemandEntry.user_id, CampaignDemandEntry.campaign_id)
+    )
+    raw_rows = agg_result.all()
+
+    if not raw_rows:
+        return {"entries": [], "total": 0, "threshold_pct": int(FRAUD_WATCH_THRESHOLD * 100)}
+
+    # Fetch campaigns
+    campaign_ids = list({r.campaign_id for r in raw_rows})
+    campaigns_result = await db.execute(
+        select(Campaign.id, Campaign.moq, Campaign.title_override, Campaign.status, Campaign.product_id)
+        .where(Campaign.id.in_(campaign_ids))
+    )
+    campaign_map = {}
+    product_ids = []
+    for c in campaigns_result.all():
+        campaign_map[c.id] = {
+            "moq": c.moq, "title_override": c.title_override,
+            "status": c.status, "product_id": c.product_id,
+        }
+        product_ids.append(c.product_id)
+
+    # Fetch product titles for campaigns without title_override
+    products_result = await db.execute(
+        select(Product.id, Product.title).where(Product.id.in_(product_ids))
+    )
+    product_map = {p.id: p.title for p in products_result.all()}
+
+    # Fetch users
+    user_ids = list({r.user_id for r in raw_rows})
+    users_result = await db.execute(
+        select(User.id, User.email, User.full_name).where(User.id.in_(user_ids))
+    )
+    user_map = {u.id: {"email": u.email, "full_name": u.full_name} for u in users_result.all()}
+
+    entries = []
+    for r in raw_rows:
+        camp = campaign_map.get(r.campaign_id)
+        if not camp:
+            continue
+        moq = camp["moq"]
+        if not moq or moq <= 0:
+            continue
+
+        user_total_qty = int(r.user_total_qty or 0)
+        percent_of_moq = user_total_qty / moq
+
+        if percent_of_moq < FRAUD_WATCH_THRESHOLD:
+            continue
+
+        # Risk level
+        if percent_of_moq >= FRAUD_CRITICAL_THRESHOLD:
+            risk_level = "critical"
+        elif percent_of_moq >= FRAUD_HIGH_THRESHOLD:
+            risk_level = "high"
+        else:
+            risk_level = "watch"
+
+        # Risk reasons
+        risk_reasons = []
+        if percent_of_moq >= FRAUD_WATCH_THRESHOLD:
+            risk_reasons.append(f"MOQ'nun %{round(percent_of_moq * 100, 1)}'ini tek kullanıcı alıyor")
+        if int(r.entry_count) > 1:
+            risk_reasons.append(f"Aynı kampanyaya {r.entry_count} demand entry bırakılmış")
+        if int(r.flagged_count or 0) > 0:
+            risk_reasons.append(f"{r.flagged_count} flaglenmiş entry")
+        if int(r.removed_count or 0) > 0:
+            risk_reasons.append(f"{r.removed_count} silinmiş entry geçmişi")
+
+        user_info = user_map.get(r.user_id, {})
+        title = camp.get("title_override") or product_map.get(camp["product_id"], "")
+
+        entries.append({
+            "user_id": str(r.user_id),
+            "email": user_info.get("email", ""),
+            "full_name": user_info.get("full_name"),
+            "campaign_id": str(r.campaign_id),
+            "campaign_title": title,
+            "campaign_moq": moq,
+            "campaign_status": camp["status"],
+            "user_total_quantity": user_total_qty,
+            "percent_of_moq": round(percent_of_moq * 100, 1),
+            "entry_count": int(r.entry_count),
+            "flagged_count": int(r.flagged_count or 0),
+            "removed_count": int(r.removed_count or 0),
+            "last_activity": r.last_activity.isoformat() if r.last_activity else None,
+            "risk_level": risk_level,
+            "risk_reasons": risk_reasons,
+        })
+
+    # Sort by percent_of_moq desc
+    entries.sort(key=lambda x: x["percent_of_moq"], reverse=True)
+
+    return {
+        "entries": entries,
+        "total": len(entries),
+        "threshold_pct": int(FRAUD_WATCH_THRESHOLD * 100),
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# ACTION ITEMS — operasyonel aksiyon bekleyen kampanyalar & trendler
+# ══════════════════════════════════════════════════════════════════════════
+
+@router.get("/action-items")
+async def get_action_items(
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Aksiyon bekleyen kampanyalar, trendler ve son moderasyon aktiviteleri.
+    """
+    now = datetime.now(timezone.utc)
+    twenty_four_h_ago = now - timedelta(hours=24)
+    seven_days_ago = now - timedelta(days=7)
+
+    # 1) MOQ dolmuş ama payment_collecting'e geçmemiş
+    moq_stalled_result = await db.execute(
+        select(Campaign.id, Campaign.moq_reached_at, Campaign.product_id, Campaign.title_override, Campaign.moq)
+        .where(Campaign.status == "moq_reached")
+        .order_by(Campaign.moq_reached_at.asc().nullslast())
+        .limit(10)
+    )
+    moq_stalled_rows = moq_stalled_result.all()
+
+    # 2) Ödeme bekleyen (payment_collecting) kampanyalar
+    payment_pending_result = await db.execute(
+        select(Campaign.id, Campaign.payment_deadline, Campaign.product_id, Campaign.title_override, Campaign.moq)
+        .where(Campaign.status == "payment_collecting")
+        .order_by(Campaign.payment_deadline.asc().nullslast())
+        .limit(10)
+    )
+    payment_pending_rows = payment_pending_result.all()
+
+    # 3) MOQ'ya en yakın aktif kampanyalar
+    # participant toplamı yüksek olanlar
+    participant_counts = await db.execute(
+        select(
+            CampaignParticipant.campaign_id,
+            func.sum(CampaignParticipant.quantity).label("total_qty"),
+        )
+        .where(CampaignParticipant.status.in_(["joined", "invited", "paid"]))
+        .group_by(CampaignParticipant.campaign_id)
+    )
+    part_map = {str(r.campaign_id): int(r.total_qty or 0) for r in participant_counts.all()}
+
+    active_camps_result = await db.execute(
+        select(Campaign.id, Campaign.moq, Campaign.product_id, Campaign.title_override)
+        .where(Campaign.status == "active")
+        .limit(50)
+    )
+    active_camps = active_camps_result.all()
+
+    # calculate fill pct
+    near_moq = []
+    for c in active_camps:
+        qty = part_map.get(str(c.id), 0)
+        if c.moq and c.moq > 0:
+            pct = qty / c.moq * 100
+            near_moq.append({"campaign_id": str(c.id), "fill_pct": round(pct, 1), "current_qty": qty, "moq": c.moq, "product_id": str(c.product_id), "title_override": c.title_override})
+    near_moq.sort(key=lambda x: x["fill_pct"], reverse=True)
+    near_moq = near_moq[:10]
+
+    # 4) Son 24 saatte demand alan kampanyalar
+    trending_result = await db.execute(
+        select(
+            CampaignDemandEntry.campaign_id,
+            func.count(CampaignDemandEntry.id).label("entry_count"),
+            func.sum(CampaignDemandEntry.quantity).label("qty_sum"),
+        )
+        .where(
+            CampaignDemandEntry.created_at >= twenty_four_h_ago,
+            CampaignDemandEntry.status == "active",
+        )
+        .group_by(CampaignDemandEntry.campaign_id)
+        .order_by(func.sum(CampaignDemandEntry.quantity).desc())
+        .limit(10)
+    )
+    trending_rows = trending_result.all()
+
+    # 5) Son 30 günde en çok talep alan kampanyalar
+    top_demand_30d_result = await db.execute(
+        select(
+            CampaignDemandEntry.campaign_id,
+            func.sum(CampaignDemandEntry.quantity).label("qty_sum"),
+        )
+        .where(
+            CampaignDemandEntry.created_at >= now - timedelta(days=30),
+            CampaignDemandEntry.status == "active",
+        )
+        .group_by(CampaignDemandEntry.campaign_id)
+        .order_by(func.sum(CampaignDemandEntry.quantity).desc())
+        .limit(10)
+    )
+    top_demand_30d = top_demand_30d_result.all()
+
+    # 6) Son silinen / flaglenen demand entries
+    recent_moderated_result = await db.execute(
+        select(CampaignDemandEntry, User)
+        .join(User, CampaignDemandEntry.user_id == User.id)
+        .where(CampaignDemandEntry.status.in_(["removed", "flagged"]))
+        .order_by(CampaignDemandEntry.removed_at.desc().nullslast(),
+                  CampaignDemandEntry.created_at.desc())
+        .limit(10)
+    )
+    recent_moderated = recent_moderated_result.all()
+
+    unique_camp_ids_uuid = list({r.id for r in moq_stalled_rows} |
+                                 {r.id for r in payment_pending_rows} |
+                                 {c.id for c in active_camps} |
+                                 {r.campaign_id for r in trending_rows} |
+                                 {r.campaign_id for r in top_demand_30d} |
+                                 {e.campaign_id for e, _ in recent_moderated})
+
+    if unique_camp_ids_uuid:
+        camps_lookup_result = await db.execute(
+            select(Campaign.id, Campaign.title_override, Campaign.product_id, Campaign.status)
+            .where(Campaign.id.in_(unique_camp_ids_uuid))
+        )
+        camps_lookup = {c.id: c for c in camps_lookup_result.all()}
+
+        prod_ids_lookup = list({c.product_id for c in camps_lookup.values()})
+        if prod_ids_lookup:
+            prods_result = await db.execute(
+                select(Product.id, Product.title).where(Product.id.in_(prod_ids_lookup))
+            )
+            prod_map2 = {p.id: p.title for p in prods_result.all()}
+        else:
+            prod_map2 = {}
+    else:
+        camps_lookup = {}
+        prod_map2 = {}
+
+    def camp_title(cid):
+        c = camps_lookup.get(cid)
+        if not c:
+            return str(cid)
+        return c.title_override or prod_map2.get(c.product_id, str(cid))
+
+    return {
+        "moq_stalled": [
+            {
+                "campaign_id": str(r.id),
+                "title": camp_title(r.id),
+                "moq": r.moq,
+                "moq_reached_at": r.moq_reached_at.isoformat() if r.moq_reached_at else None,
+            }
+            for r in moq_stalled_rows
+        ],
+        "payment_collecting": [
+            {
+                "campaign_id": str(r.id),
+                "title": camp_title(r.id),
+                "moq": r.moq,
+                "payment_deadline": r.payment_deadline.isoformat() if r.payment_deadline else None,
+            }
+            for r in payment_pending_rows
+        ],
+        "near_moq_active": [
+            {
+                "campaign_id": x["campaign_id"],
+                "title": x["title_override"] or prod_map2.get(
+                    next((c.product_id for c in active_camps if str(c.id) == x["campaign_id"]), None),
+                    x["campaign_id"]
+                ),
+                "fill_pct": x["fill_pct"],
+                "current_qty": x["current_qty"],
+                "moq": x["moq"],
+            }
+            for x in near_moq
+        ],
+        "trending_24h": [
+            {
+                "campaign_id": str(r.campaign_id),
+                "title": camp_title(r.campaign_id),
+                "entry_count": int(r.entry_count),
+                "qty_sum": int(r.qty_sum or 0),
+            }
+            for r in trending_rows
+        ],
+        "top_demand_30d": [
+            {
+                "campaign_id": str(r.campaign_id),
+                "title": camp_title(r.campaign_id),
+                "qty_sum": int(r.qty_sum or 0),
+            }
+            for r in top_demand_30d
+        ],
+        "recent_moderated": [
+            {
+                "entry_id": str(entry.id),
+                "campaign_id": str(entry.campaign_id),
+                "campaign_title": camp_title(entry.campaign_id),
+                "user_email": user.email,
+                "quantity": entry.quantity,
+                "status": entry.status,
+                "admin_note": entry.admin_note,
+                "removal_reason": entry.removal_reason,
+                "removed_at": entry.removed_at.isoformat() if entry.removed_at else None,
+                "created_at": entry.created_at.isoformat(),
+            }
+            for entry, user in recent_moderated
+        ],
+    }
 
 
 # ══════════════════════════════════════════════════════════════════════════

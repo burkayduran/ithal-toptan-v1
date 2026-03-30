@@ -18,6 +18,9 @@ import {
   getCampaignDemandEntries,
   deleteDemandEntry,
   uploadProductImage,
+  getDemandUsers,
+  getFraudWatch,
+  getActionItems,
 } from "./api";
 import type {
   CampaignCreatePayload,
@@ -205,5 +208,35 @@ export function useDeleteDemandEntry(campaignId: string) {
 export function useUploadProductImage() {
   return useMutation({
     mutationFn: (file: File) => uploadProductImage(file),
+  });
+}
+
+// ── Demand Users ──────────────────────────────────────────────────────────────
+
+export function useDemandUsers(sort = "quantity_desc") {
+  return useQuery({
+    queryKey: ["admin", "demand-users", sort],
+    queryFn: () => getDemandUsers(sort),
+    staleTime: 30_000,
+  });
+}
+
+// ── Fraud Watch ───────────────────────────────────────────────────────────────
+
+export function useFraudWatch() {
+  return useQuery({
+    queryKey: ["admin", "fraud-watch"],
+    queryFn: getFraudWatch,
+    staleTime: 30_000,
+  });
+}
+
+// ── Action Items ──────────────────────────────────────────────────────────────
+
+export function useActionItems() {
+  return useQuery({
+    queryKey: ["admin", "action-items"],
+    queryFn: getActionItems,
+    staleTime: 60_000,
   });
 }
