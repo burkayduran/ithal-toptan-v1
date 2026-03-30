@@ -44,6 +44,7 @@ alembic/versions/*.pyc
 frontend/.next/
 frontend/node_modules/
 frontend/next-env.d.ts
+frontend/tsconfig.tsbuildinfo
 
 # Claude Code
 .claude/
