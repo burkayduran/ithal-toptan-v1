@@ -232,9 +232,19 @@ async def get_campaign(
     if campaign.status not in _DETAIL_STATUSES:
         raise HTTPException(status_code=404, detail="Campaign not found")
 
-    # payment_collecting and beyond are only visible to authenticated users
-    if campaign.status == "payment_collecting" and current_user is None:
-        raise HTTPException(status_code=404, detail="Campaign not found")
+    # payment_collecting: only visible to participants and admins
+    if campaign.status == "payment_collecting":
+        if current_user is None:
+            raise HTTPException(status_code=404, detail="Campaign not found")
+        if not current_user.is_admin:
+            participant_check = await db.execute(
+                select(CampaignParticipant.id).where(
+                    CampaignParticipant.campaign_id == campaign_id,
+                    CampaignParticipant.user_id == current_user.id,
+                )
+            )
+            if participant_check.scalar_one_or_none() is None:
+                raise HTTPException(status_code=404, detail="Campaign not found")
 
     # Atomic view_count increment
     await db.execute(

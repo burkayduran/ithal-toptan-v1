@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useAdminCampaigns, usePublishCampaign, useBulkPublishCampaigns, useBulkCancelCampaigns } from "@/features/admin/hooks";
 import { formatCurrency } from "@/lib/utils/formatCurrency";
 import { Button } from "@/components/ui/button";
@@ -10,17 +11,21 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Search, Loader2 } from "lucide-react";
 import { getStatusConfig, STATUS_ORDER } from "@/lib/config/campaignStatus";
 
-export default function AdminProductsPage() {
+const VALID_STATUSES = new Set(STATUS_ORDER);
+
+function AdminProductsContent() {
+  const searchParams = useSearchParams();
+  const rawStatus = searchParams.get("status") ?? "all";
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState(
+    () => (rawStatus === "all" || VALID_STATUSES.has(rawStatus)) ? rawStatus : "all"
+  );
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
   const { data: campaigns, isLoading, isError, refetch } = useAdminCampaigns();
   const { mutate: publish, isPending: isPublishing, variables: publishingId } = usePublishCampaign();
   const { mutate: bulkPublish, isPending: isBulkPublishing } = useBulkPublishCampaigns();
   const { mutate: bulkCancel, isPending: isBulkCancelling } = useBulkCancelCampaigns();
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState(() => {
-    if (typeof window === "undefined") return "all";
-    return new URLSearchParams(window.location.search).get("status") ?? "all";
-  });
-  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const filtered = (campaigns ?? []).filter((p) => {
     const matchesSearch = p.title.toLowerCase().includes(search.toLowerCase());
@@ -215,5 +220,13 @@ export default function AdminProductsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function AdminProductsPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-gray-400">Yükleniyor...</div>}>
+      <AdminProductsContent />
+    </Suspense>
   );
 }
