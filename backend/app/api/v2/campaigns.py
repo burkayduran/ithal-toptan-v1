@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import get_current_active_user
+from app.core.auth import get_current_active_user, get_optional_user
 from app.core.limiter import limiter
 from app.db.session import get_db
 from app.models.models import (
@@ -215,8 +215,9 @@ async def get_my_campaigns(
 async def get_campaign(
     campaign_id: UUID,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_optional_user),
 ):
-    """Get campaign detail (public)."""
+    """Get campaign detail. payment_collecting requires authentication."""
     result = await db.execute(
         select(Campaign, Product)
         .join(Product, Campaign.product_id == Product.id)
@@ -229,6 +230,10 @@ async def get_campaign(
 
     campaign, product = row
     if campaign.status not in _DETAIL_STATUSES:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    # payment_collecting and beyond are only visible to authenticated users
+    if campaign.status == "payment_collecting" and current_user is None:
         raise HTTPException(status_code=404, detail="Campaign not found")
 
     # Atomic view_count increment

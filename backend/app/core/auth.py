@@ -99,3 +99,29 @@ async def require_admin(current_user: User = Depends(get_current_user)) -> User:
             detail="Not enough privileges"
         )
     return current_user
+
+
+# Optional-auth bearer — returns None if no/invalid token (never raises 401)
+_optional_security = HTTPBearer(auto_error=False)
+
+
+async def get_optional_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_optional_security),
+    db: AsyncSession = Depends(get_db),
+) -> Optional[User]:
+    """Return the authenticated user if a valid token is present, else None."""
+    if credentials is None:
+        return None
+    try:
+        payload = jwt.decode(credentials.credentials, settings.SECRET_KEY, algorithms=[ALGORITHM])
+        user_id_str: str = payload.get("sub")
+        if user_id_str is None:
+            return None
+        user_id = UUID(user_id_str)
+    except (JWTError, ValueError, AttributeError):
+        return None
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if user is None or not user.is_active:
+        return None
+    return user
