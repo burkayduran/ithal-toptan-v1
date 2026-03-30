@@ -112,35 +112,8 @@ export default function JoinPanel({ campaign, participant }: JoinPanelProps) {
   // ── Backend accepts joins for active + moq_reached ────────────────────────
   const canJoin = campaign.status === "active" || campaign.status === "moq_reached";
 
-  // ── Already in queue (joined) while campaign still accepting ────────────
-  if (participant?.status === "joined" && canJoin) {
-    const isPaymentPhase = campaign.status === "moq_reached";
-    return (
-      <div className="rounded-xl border border-blue-200 bg-blue-50 p-5 space-y-4">
-        {canShowProgress && (
-          <ProgressBlock
-            currentCount={campaign.current_participant_count!}
-            targetCount={campaign.moq!}
-          />
-        )}
-        <StateNoticeBanner
-          type="info"
-          message={
-            isPaymentPhase
-              ? "Hedef doldu! Ödeme davetiniz en kısa sürede gönderilecek."
-              : "Katılım listendesiniz. Hedef dolduğunda ödeme daveti alacaksınız."
-          }
-        />
-        <Link href="/my-campaigns">
-          <Button variant="outline" className="w-full">
-            Siparişlerime Git →
-          </Button>
-        </Link>
-      </div>
-    );
-  }
+  // ── Join UI (no participant yet, or participant is joined and can add more) ─
 
-  // ── Join UI (no participant yet, or participant is cancelled) ─────────────
   const handleJoin = () => {
     if (!user) {
       openAuthModal(() => {
@@ -176,6 +149,14 @@ export default function JoinPanel({ campaign, participant }: JoinPanelProps) {
             />
           )}
 
+          {/* Show existing demand info if already joined */}
+          {participant?.status === "joined" && (
+            <div className="flex items-center justify-between text-sm bg-blue-50 rounded-lg px-3 py-2">
+              <span className="text-blue-700 font-medium">Mevcut talebiniz</span>
+              <span className="text-blue-900 font-bold">{participant.quantity} adet</span>
+            </div>
+          )}
+
           <WishlistQuantitySelector quantity={quantity} onChange={setQuantity} />
 
           {error && (
@@ -201,6 +182,8 @@ export default function JoinPanel({ campaign, participant }: JoinPanelProps) {
               ? "Kaydediliyor..."
               : campaign.status === "moq_reached"
               ? "Ödeme Sürecine Katıl"
+              : participant?.status === "joined"
+              ? "Ek Talep Oluştur"
               : "Katılım Listesine Ekle"}
           </Button>
 
@@ -209,6 +192,14 @@ export default function JoinPanel({ campaign, participant }: JoinPanelProps) {
               ? "Yerinizi ayırtmak için ödemeyi tamamlamanız gerekecek."
               : "Yeterli talep oluştuğunda ödeme daveti alacaksınız."}
           </p>
+
+          {participant?.status === "joined" && (
+            <Link href="/my-campaigns">
+              <p className="text-xs text-blue-600 hover:underline text-center cursor-pointer">
+                Siparişlerime git →
+              </p>
+            </Link>
+          )}
         </>
       ) : campaign.status === "payment_collecting" ? (
         <StateNoticeBanner

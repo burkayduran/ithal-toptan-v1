@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRegister } from "@/features/auth/hooks";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2 } from "lucide-react";
+import { Loader2, CheckCircle2 } from "lucide-react";
 
 interface RegisterFormProps {
   onSwitchToLogin: () => void;
@@ -15,12 +15,39 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
   const [full_name, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const { mutate: register, isPending, error } = useRegister();
+  const { mutate: register, isPending, error, isSuccess } = useRegister();
+
+  // After successful registration, switch to login tab automatically
+  useEffect(() => {
+    if (!isSuccess) return;
+    const timer = setTimeout(onSwitchToLogin, 2000);
+    return () => clearTimeout(timer);
+  }, [isSuccess, onSwitchToLogin]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     register({ email, password, full_name });
   };
+
+  // Success state — show confirmation, auto-redirect to login
+  if (isSuccess) {
+    return (
+      <div className="space-y-4 text-center py-2">
+        <div className="flex justify-center">
+          <CheckCircle2 className="h-10 w-10 text-green-500" />
+        </div>
+        <div>
+          <p className="font-semibold text-gray-900">Hesabınız oluşturuldu!</p>
+          <p className="text-sm text-gray-500 mt-1">
+            Şimdi giriş yapabilirsiniz.
+          </p>
+        </div>
+        <Button variant="outline" className="w-full" onClick={onSwitchToLogin}>
+          Giriş Yap
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">

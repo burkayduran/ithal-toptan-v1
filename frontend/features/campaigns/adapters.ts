@@ -1,11 +1,9 @@
 import { Campaign } from "./types";
-import { isCampaignReached } from "@/lib/utils/campaign";
 
 export type StatusFilter =
   | "all"
   | "active"
-  | "near_unlock"
-  | "moq_reached";
+  | "near_unlock";
 
 export type SortOption = "near_unlock" | "newest" | "lowest_price";
 
@@ -33,8 +31,6 @@ export function filterCampaigns(
       return result.filter(
         (c) => c.status === "active" && (c.moq_fill_percentage ?? 0) >= 60
       );
-    case "moq_reached":
-      return result.filter((c) => c.status === "moq_reached" && isCampaignReached(c));
     default:
       return result;
   }

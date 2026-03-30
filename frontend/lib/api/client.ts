@@ -66,7 +66,10 @@ async function request<T>(
       });
 
       // Token expired — logout and trigger auth modal
-      if (res.status === 401) {
+      // Skip this for auth endpoints (login/register) — their 401 is a
+      // credential error, not an expired session.
+      const isAuthEndpoint = path === "/api/v1/auth/login" || path === "/api/v1/auth/register";
+      if (res.status === 401 && !isAuthEndpoint) {
         const { useAuthStore } = await import("@/features/auth/store");
         const store = useAuthStore.getState();
         store.logout();

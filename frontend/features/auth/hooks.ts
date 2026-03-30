@@ -27,22 +27,14 @@ export function useLogin() {
   });
 }
 
+/**
+ * Register — intentionally does NOT auto-login.
+ * On success the caller should show a success message and redirect the user
+ * to the login tab. Token from the backend is purposefully discarded.
+ */
 export function useRegister() {
-  const { setAuth, consumePostAuthAction, closeAuthModal } = useAuthStore();
-  const queryClient = useQueryClient();
-
   return useMutation({
-    mutationFn: async (payload: RegisterPayload) => {
-      const tokenData = await register(payload);
-      storeToken(tokenData.access_token);
-      const user = await getMe();
-      return { token: tokenData.access_token, user };
-    },
-    onSuccess: ({ token, user }) => {
-      setAuth(token, user);
-      queryClient.invalidateQueries({ queryKey: ["wishlist"] });
-      consumePostAuthAction();
-      closeAuthModal();
-    },
+    mutationFn: (payload: RegisterPayload) => register(payload),
+    // No onSuccess side-effects: token is discarded, user stays logged out.
   });
 }
