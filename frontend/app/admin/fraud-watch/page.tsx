@@ -95,15 +95,15 @@ function FraudRow({ entry }: { entry: FraudWatchEntry }) {
         <td className="px-4 py-3 text-right">
           <div className="flex items-center justify-end gap-2">
             <Link
-              href={`/admin/demand-users`}
+              href={`/admin/demand-users/${entry.user_id}`}
               onClick={(e) => e.stopPropagation()}
-              title="Demand Users"
-              className="text-gray-400 hover:text-blue-600 transition-colors"
+              title="Kullanıcı detayı"
+              className="text-gray-400 hover:text-purple-600 transition-colors"
             >
               <Users className="h-4 w-4" />
             </Link>
             <Link
-              href={`/admin/products?status=${entry.campaign_status}`}
+              href={`/admin/products/${entry.campaign_id}`}
               onClick={(e) => e.stopPropagation()}
               title="Kampanyaya git"
               className="text-gray-400 hover:text-blue-600 transition-colors"

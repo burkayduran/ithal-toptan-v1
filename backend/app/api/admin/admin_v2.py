@@ -1063,6 +1063,94 @@ async def list_demand_users(
     return {"users": users, "total": len(users)}
 
 
+@router.get("/demand-users/{user_id}")
+async def get_demand_user_detail(
+    user_id: UUID,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Kullanıcının tüm kampanyalardaki demand geçmişini döndür."""
+    user_result = await db.execute(select(User).where(User.id == user_id))
+    target_user = user_result.scalar_one_or_none()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    entries_result = await db.execute(
+        select(CampaignDemandEntry, Campaign)
+        .join(Campaign, CampaignDemandEntry.campaign_id == Campaign.id)
+        .where(CampaignDemandEntry.user_id == user_id)
+        .order_by(CampaignDemandEntry.created_at.desc())
+    )
+    rows = entries_result.all()
+
+    # Fetch product titles for campaigns
+    product_ids = list({c.product_id for _, c in rows})
+    prod_result = await db.execute(
+        select(Product.id, Product.title).where(Product.id.in_(product_ids))
+    )
+    prod_map = {p.id: p.title for p in prod_result.all()}
+
+    # Group by campaign
+    from collections import defaultdict
+    camp_groups: dict = defaultdict(list)
+    camp_meta: dict = {}
+    for entry, campaign in rows:
+        cid = str(campaign.id)
+        camp_groups[cid].append(entry)
+        camp_meta[cid] = campaign
+
+    campaigns_out = []
+    for cid, entries in camp_groups.items():
+        camp = camp_meta[cid]
+        title = camp.title_override or prod_map.get(camp.product_id, cid[:8])
+        active_qty = sum(e.quantity for e in entries if e.status == "active")
+        flagged = sum(1 for e in entries if e.status == "flagged")
+        removed = sum(1 for e in entries if e.status == "removed")
+        last_act = max(e.created_at for e in entries)
+
+        campaigns_out.append({
+            "campaign_id": cid,
+            "campaign_title": title,
+            "campaign_status": camp.status,
+            "campaign_moq": camp.moq,
+            "total_active_quantity": active_qty,
+            "entry_count": len(entries),
+            "flagged_count": flagged,
+            "removed_count": removed,
+            "last_activity": last_act.isoformat(),
+            "entries": [
+                {
+                    "id": str(e.id),
+                    "quantity": e.quantity,
+                    "status": e.status,
+                    "admin_note": e.admin_note,
+                    "removal_reason": e.removal_reason,
+                    "removed_at": e.removed_at.isoformat() if e.removed_at else None,
+                    "created_at": e.created_at.isoformat(),
+                }
+                for e in sorted(entries, key=lambda x: x.created_at, reverse=True)
+            ],
+        })
+
+    # Sort campaigns by last activity desc
+    campaigns_out.sort(key=lambda x: x["last_activity"], reverse=True)
+
+    return {
+        "user_id": str(target_user.id),
+        "email": target_user.email,
+        "full_name": target_user.full_name,
+        "created_at": target_user.created_at.isoformat() if target_user.created_at else None,
+        "campaigns": campaigns_out,
+        "totals": {
+            "total_entries": len(rows),
+            "total_active_quantity": sum(e.quantity for e, _ in rows if e.status == "active"),
+            "unique_campaigns": len(camp_groups),
+            "flagged_count": sum(1 for e, _ in rows if e.status == "flagged"),
+            "removed_count": sum(1 for e, _ in rows if e.status == "removed"),
+        },
+    }
+
+
 # ══════════════════════════════════════════════════════════════════════════
 # FRAUD WATCH — MOQ %10+ risk tespiti
 # ══════════════════════════════════════════════════════════════════════════

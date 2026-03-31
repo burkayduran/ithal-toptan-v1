@@ -17,8 +17,10 @@ import {
   getDashboardSummary,
   getCampaignDemandEntries,
   deleteDemandEntry,
+  updateDemandEntry,
   uploadProductImage,
   getDemandUsers,
+  getDemandUserDetail,
   getFraudWatch,
   getActionItems,
 } from "./api";
@@ -205,6 +207,17 @@ export function useDeleteDemandEntry(campaignId: string) {
   });
 }
 
+export function useUpdateDemandEntry(campaignId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ entryId, data }: { entryId: string; data: { admin_note?: string; status?: string } }) =>
+      updateDemandEntry(entryId, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "demand-entries", campaignId] });
+    },
+  });
+}
+
 export function useUploadProductImage() {
   return useMutation({
     mutationFn: (file: File) => uploadProductImage(file),
@@ -217,6 +230,15 @@ export function useDemandUsers(sort = "quantity_desc") {
   return useQuery({
     queryKey: ["admin", "demand-users", sort],
     queryFn: () => getDemandUsers(sort),
+    staleTime: 30_000,
+  });
+}
+
+export function useDemandUserDetail(userId: string) {
+  return useQuery({
+    queryKey: ["admin", "demand-users", userId, "detail"],
+    queryFn: () => getDemandUserDetail(userId),
+    enabled: !!userId,
     staleTime: 30_000,
   });
 }

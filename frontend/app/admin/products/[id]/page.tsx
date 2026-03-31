@@ -10,6 +10,7 @@ import {
   useCalculatePrice,
   useCampaignDemandEntries,
   useDeleteDemandEntry,
+  useUpdateDemandEntry,
   useUploadProductImage,
 } from "@/features/admin/hooks";
 import type { AdminCampaign, AdminCategory } from "@/features/admin/types";
@@ -19,7 +20,7 @@ import { Input } from "@/components/ui/input";
 import { getStatusConfig, STATUS_ORDER } from "@/lib/config/campaignStatus";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, ArrowLeft, RefreshCw, Trash2, Upload } from "lucide-react";
+import { Loader2, ArrowLeft, RefreshCw, Trash2, Upload, Flag, MessageSquare, X, AlertTriangle } from "lucide-react";
 import Link from "next/link";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -81,18 +82,28 @@ function StatusSelect({
   );
 }
 
-function DemandEntriesSection({ campaignId }: { campaignId: string }) {
+function DemandEntriesSection({ campaignId, moq }: { campaignId: string; moq?: number | null }) {
   const { data, isLoading } = useCampaignDemandEntries(campaignId);
   const { mutate: removeEntry, isPending: isRemoving } = useDeleteDemandEntry(campaignId);
+  const { mutate: updateEntry } = useUpdateDemandEntry(campaignId);
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [noteText, setNoteText] = useState("");
 
   function handleRemove(entryId: string) {
     if (!window.confirm("Bu talebi kaldırmak istediğinize emin misiniz?")) return;
     setRemovingId(entryId);
-    removeEntry(
-      { entryId },
-      { onSettled: () => setRemovingId(null) }
-    );
+    removeEntry({ entryId }, { onSettled: () => setRemovingId(null) });
+  }
+
+  function handleToggleFlag(entryId: string, currentStatus: string) {
+    const newStatus = currentStatus === "flagged" ? "active" : "flagged";
+    updateEntry({ entryId, data: { status: newStatus } });
+  }
+
+  function handleSaveNote(entryId: string) {
+    updateEntry({ entryId, data: { admin_note: noteText } });
+    setEditingNoteId(null);
   }
 
   if (isLoading) return (
@@ -104,6 +115,14 @@ function DemandEntriesSection({ campaignId }: { campaignId: string }) {
 
   const entries = data?.entries ?? [];
   const activeEntries = entries.filter((e) => e.status !== "removed");
+
+  // Per-user quantity for MOQ risk badges
+  const userQtyMap: Record<string, number> = {};
+  for (const e of activeEntries) {
+    if (e.status === "active") {
+      userQtyMap[e.user_id] = (userQtyMap[e.user_id] ?? 0) + e.quantity;
+    }
+  }
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
@@ -125,45 +144,112 @@ function DemandEntriesSection({ campaignId }: { campaignId: string }) {
                 <th className="text-left px-3 py-2 font-medium text-gray-600">Kullanıcı</th>
                 <th className="text-left px-3 py-2 font-medium text-gray-600">Adet</th>
                 <th className="text-left px-3 py-2 font-medium text-gray-600">Durum</th>
+                <th className="text-left px-3 py-2 font-medium text-gray-600">Not</th>
                 <th className="text-left px-3 py-2 font-medium text-gray-600">Tarih</th>
                 <th className="text-right px-3 py-2 font-medium text-gray-600">İşlem</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {activeEntries.map((entry) => (
-                <tr key={entry.id} className={entry.status === "flagged" ? "bg-amber-50" : ""}>
-                  <td className="px-3 py-2">
-                    <p className="font-medium text-gray-800">{entry.user_email}</p>
-                    {entry.user_full_name && (
-                      <p className="text-gray-400">{entry.user_full_name}</p>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-gray-700">{entry.quantity}</td>
-                  <td className="px-3 py-2">
-                    <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
-                      entry.status === "active" ? "bg-green-100 text-green-700" :
-                      entry.status === "flagged" ? "bg-amber-100 text-amber-700" :
-                      "bg-gray-100 text-gray-500"
-                    }`}>
-                      {entry.status}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 text-gray-400">
-                    {new Date(entry.created_at).toLocaleDateString("tr-TR")}
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-6 w-6 p-0 text-red-400 hover:text-red-600 hover:bg-red-50"
-                      disabled={isRemoving && removingId === entry.id}
-                      onClick={() => handleRemove(entry.id)}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </td>
-                </tr>
-              ))}
+              {activeEntries.map((entry) => {
+                const userTotalQty = userQtyMap[entry.user_id] ?? 0;
+                const moqPct = moq && moq > 0 ? userTotalQty / moq : 0;
+                const isMoqRisk = moqPct >= 0.10;
+                const riskColor = moqPct >= 0.30 ? "text-red-600" : moqPct >= 0.20 ? "text-orange-500" : "text-yellow-600";
+
+                return (
+                  <tr key={entry.id} className={entry.status === "flagged" ? "bg-amber-50" : ""}>
+                    <td className="px-3 py-2">
+                      <div className="flex items-start gap-1">
+                        <div>
+                          <p className="font-medium text-gray-800">{entry.user_email}</p>
+                          {entry.user_full_name && (
+                            <p className="text-gray-400">{entry.user_full_name}</p>
+                          )}
+                        </div>
+                        {isMoqRisk && (
+                          <span className={`flex items-center gap-0.5 text-xs font-semibold ${riskColor} ml-1 mt-0.5`} title={`Bu kullanıcı MOQ'nun %${Math.round(moqPct*100)}'ini alıyor`}>
+                            <AlertTriangle className="h-3 w-3" />
+                            %{Math.round(moqPct * 100)}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-3 py-2 text-gray-700 font-semibold">{entry.quantity}</td>
+                    <td className="px-3 py-2">
+                      <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
+                        entry.status === "active" ? "bg-green-100 text-green-700" :
+                        entry.status === "flagged" ? "bg-amber-100 text-amber-700" :
+                        "bg-gray-100 text-gray-500"
+                      }`}>
+                        {entry.status === "active" ? "Aktif" : entry.status === "flagged" ? "Flaglendi" : entry.status}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 max-w-[140px]">
+                      {editingNoteId === entry.id ? (
+                        <div className="flex items-center gap-1">
+                          <input
+                            autoFocus
+                            value={noteText}
+                            onChange={(e) => setNoteText(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") handleSaveNote(entry.id);
+                              if (e.key === "Escape") setEditingNoteId(null);
+                            }}
+                            className="border border-gray-300 rounded px-1.5 py-0.5 text-xs w-full focus:outline-none focus:ring-1 focus:ring-blue-400"
+                          />
+                          <button onClick={() => handleSaveNote(entry.id)} className="text-green-600 hover:text-green-700">✓</button>
+                          <button onClick={() => setEditingNoteId(null)} className="text-gray-400 hover:text-gray-600"><X className="h-3 w-3" /></button>
+                        </div>
+                      ) : entry.admin_note ? (
+                        <button
+                          onClick={() => { setEditingNoteId(entry.id); setNoteText(entry.admin_note ?? ""); }}
+                          className="text-left text-gray-500 italic truncate max-w-[130px] hover:text-gray-700 block"
+                          title={entry.admin_note}
+                        >
+                          {entry.admin_note}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => { setEditingNoteId(entry.id); setNoteText(""); }}
+                          className="text-gray-300 hover:text-gray-500 transition-colors"
+                          title="Not ekle"
+                        >
+                          <MessageSquare className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-gray-400">
+                      {new Date(entry.created_at).toLocaleDateString("tr-TR")}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className={`h-6 w-6 p-0 transition-colors ${
+                            entry.status === "flagged"
+                              ? "text-amber-500 hover:text-amber-700 hover:bg-amber-50"
+                              : "text-gray-300 hover:text-amber-500 hover:bg-amber-50"
+                          }`}
+                          title={entry.status === "flagged" ? "Flag kaldır" : "Flagle"}
+                          onClick={() => handleToggleFlag(entry.id, entry.status)}
+                        >
+                          <Flag className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 w-6 p-0 text-red-400 hover:text-red-600 hover:bg-red-50"
+                          disabled={isRemoving && removingId === entry.id}
+                          onClick={() => handleRemove(entry.id)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -172,40 +258,74 @@ function DemandEntriesSection({ campaignId }: { campaignId: string }) {
   );
 }
 
-function ImageUploadButton({ onUpload }: { onUpload: (url: string) => void }) {
+function ImageGallery({
+  urls,
+  onChange,
+}: {
+  urls: string[];
+  onChange: (urls: string[]) => void;
+}) {
   const { mutate: upload, isPending } = useUploadProductImage();
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     upload(file, {
-      onSuccess: (data) => {
-        onUpload(data.url);
-      },
-      onError: (err) => {
-        alert(`Yükleme hatası: ${err.message}`);
-      },
+      onSuccess: (data) => onChange([...urls, data.url]),
+      onError: (err) => alert(`Yükleme hatası: ${err.message}`),
     });
-    // Reset input
     e.target.value = "";
   }
 
+  function handleRemove(idx: number) {
+    onChange(urls.filter((_, i) => i !== idx));
+  }
+
   return (
-    <label className="mt-1.5 inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 cursor-pointer">
-      <input
-        type="file"
-        accept="image/jpeg,image/png,image/webp"
-        className="hidden"
-        onChange={handleFileChange}
-        disabled={isPending}
-      />
-      {isPending ? (
-        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-      ) : (
-        <Upload className="h-3.5 w-3.5" />
+    <div className="space-y-2">
+      {urls.length > 0 && (
+        <div className="grid grid-cols-3 gap-2">
+          {urls.map((url, idx) => (
+            <div key={idx} className="relative group rounded-lg overflow-hidden border border-gray-200 bg-gray-50 aspect-square">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={url}
+                alt={`Görsel ${idx + 1}`}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = "none";
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => handleRemove(idx)}
+                className="absolute top-1 right-1 bg-black/60 hover:bg-black/80 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <X className="h-3 w-3" />
+              </button>
+              <span className="absolute bottom-1 left-1 text-xs text-white bg-black/50 rounded px-1">
+                {idx + 1}
+              </span>
+            </div>
+          ))}
+        </div>
       )}
-      {isPending ? "Yükleniyor..." : "Görsel yükle"}
-    </label>
+      <label className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 cursor-pointer border border-dashed border-blue-200 rounded-lg px-3 py-2 hover:border-blue-400 transition-colors">
+        <input
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          className="hidden"
+          onChange={handleFileChange}
+          disabled={isPending}
+        />
+        {isPending ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        ) : (
+          <Upload className="h-3.5 w-3.5" />
+        )}
+        {isPending ? "Yükleniyor..." : urls.length === 0 ? "Görsel yükle" : "Görsel ekle"}
+      </label>
+    </div>
   );
 }
 
@@ -227,7 +347,7 @@ function EditForm({
     title: campaign.title,
     description: campaign.description ?? "",
     category_id: campaign.category_id ?? "",
-    images: (campaign.images ?? []).join("\n"),
+    images: campaign.images ?? [],
     status: campaign.status,
     // Supplier fields — read from _snapshot fields
     supplier_name: campaign.supplier_name_snapshot ?? "",
@@ -308,7 +428,7 @@ function EditForm({
       title: form.title.trim() || undefined,
       description: form.description.trim() || undefined,
       category_id: form.category_id || null,
-      images: form.images.split("\n").map((s) => s.trim()).filter(Boolean),
+      images: form.images,
       status: form.status || undefined,
     };
 
@@ -366,20 +486,10 @@ function EditForm({
             ))}
           </select>
         </Field>
-        <Field label="Görsel URL'leri (her satıra bir URL)">
-          <textarea
-            value={form.images}
-            onChange={set("images")}
-            rows={3}
-            className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none font-mono resize-none"
-          />
-          <ImageUploadButton
-            onUpload={(url) =>
-              setForm((prev) => ({
-                ...prev,
-                images: prev.images ? `${prev.images}\n${url}` : url,
-              }))
-            }
+        <Field label="Görseller">
+          <ImageGallery
+            urls={form.images}
+            onChange={(urls) => setForm((prev) => ({ ...prev, images: urls }))}
           />
         </Field>
         <Field label="Durum">
@@ -495,7 +605,7 @@ function EditForm({
       </div>
     </form>
     {/* Talepler — demand entries admin view */}
-    <DemandEntriesSection campaignId={campaign.id} />
+    <DemandEntriesSection campaignId={campaign.id} moq={campaign.moq} />
     </>
   );
 }

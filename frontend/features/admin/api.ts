@@ -13,6 +13,7 @@ import type {
   DashboardSummary,
   DemandEntriesResponse,
   DemandUsersResponse,
+  DemandUserDetail,
   FraudWatchResponse,
   ActionItemsResponse,
 } from "./types";
@@ -134,6 +135,10 @@ export function updateDemandEntry(
 
 export function getDemandUsers(sort = "quantity_desc"): Promise<DemandUsersResponse> {
   return api.get(`${ADMIN_V2}/demand-users?sort=${encodeURIComponent(sort)}`);
+}
+
+export function getDemandUserDetail(userId: string): Promise<DemandUserDetail> {
+  return api.get(`${ADMIN_V2}/demand-users/${encodeURIComponent(userId)}`);
 }
 
 // ── Fraud Watch ───────────────────────────────────────────────────────────────

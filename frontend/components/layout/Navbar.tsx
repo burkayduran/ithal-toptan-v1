@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useAuthStore } from "@/features/auth/store";
 import { Button } from "@/components/ui/button";
 import { Heart, LogOut, Menu, X } from "lucide-react";
@@ -8,6 +9,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
 export default function Navbar() {
+  const pathname = usePathname();
+  if (pathname.startsWith("/admin")) return null;
   const { user, isHydrated, logout, openAuthModal } = useAuthStore();
   const queryClient = useQueryClient();
   const [mobileOpen, setMobileOpen] = useState(false);

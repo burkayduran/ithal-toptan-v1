@@ -42,13 +42,6 @@ export default function AdminSidebar() {
 
   return (
     <aside className="w-56 flex-shrink-0 bg-gray-900 text-white flex flex-col">
-      {/* Brand */}
-      <div className="px-4 py-4 border-b border-gray-700">
-        <p className="text-xs font-bold uppercase tracking-widest text-gray-400">
-          Admin Panel
-        </p>
-      </div>
-
       {/* Nav */}
       <nav className="flex-1 py-3 space-y-0.5 px-2">
         {NAV.map(({ href, label, icon: Icon, exact }) => {
@@ -71,16 +64,6 @@ export default function AdminSidebar() {
           );
         })}
       </nav>
-
-      {/* Back to site */}
-      <div className="px-4 py-3 border-t border-gray-700">
-        <Link
-          href="/"
-          className="text-xs text-gray-400 hover:text-gray-200 transition-colors"
-        >
-          ← Siteye dön
-        </Link>
-      </div>
     </aside>
   );
 }

@@ -282,6 +282,46 @@ export interface ModeratedEntry {
   created_at: string;
 }
 
+// ── Demand User Detail (per-user drilldown) ───────────────────────────────────
+
+export interface DemandUserDetailEntry {
+  id: string;
+  quantity: number;
+  status: string;
+  admin_note: string | null;
+  removal_reason: string | null;
+  removed_at: string | null;
+  created_at: string;
+}
+
+export interface DemandUserDetailCampaign {
+  campaign_id: string;
+  campaign_title: string;
+  campaign_status: string;
+  campaign_moq: number | null;
+  total_active_quantity: number;
+  entry_count: number;
+  flagged_count: number;
+  removed_count: number;
+  last_activity: string;
+  entries: DemandUserDetailEntry[];
+}
+
+export interface DemandUserDetail {
+  user_id: string;
+  email: string;
+  full_name: string | null;
+  created_at: string | null;
+  campaigns: DemandUserDetailCampaign[];
+  totals: {
+    total_entries: number;
+    total_active_quantity: number;
+    unique_campaigns: number;
+    flagged_count: number;
+    removed_count: number;
+  };
+}
+
 export interface ActionItemsResponse {
   moq_stalled: MoqStalledItem[];
   payment_collecting: PaymentCollectingItem[];

@@ -66,13 +66,15 @@ function UserRow({ user }: { user: DemandUser }) {
           : "—"}
       </td>
       <td className="px-4 py-3 text-right">
-        <Link
-          href={`/admin/fraud-watch?user=${user.user_id}`}
-          className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800"
-          title="Fraud detayı"
-        >
-          <ExternalLink className="h-3 w-3" />
-        </Link>
+        <div className="flex items-center justify-end gap-2">
+          <Link
+            href={`/admin/demand-users/${user.user_id}`}
+            className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800"
+            title="Kullanıcı detayı"
+          >
+            <ExternalLink className="h-3 w-3" />
+          </Link>
+        </div>
       </td>
     </tr>
   );
