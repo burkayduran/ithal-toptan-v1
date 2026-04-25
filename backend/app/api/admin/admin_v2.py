@@ -47,38 +47,65 @@ async def get_dashboard_summary(
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Dashboard KPI summary for admin."""
+    """Operational cockpit dashboard — KPIs, attention items, lifecycle, finance, demand."""
     now = datetime.now(timezone.utc)
+    seven_days_ago = now - timedelta(days=7)
     thirty_days_ago = now - timedelta(days=30)
+    three_days_from_now = now + timedelta(days=3)
 
-    # Campaign counts by status
+    # ── Campaign counts by status ─────────────────────────────────────────────
     status_counts_result = await db.execute(
-        select(Campaign.status, func.count(Campaign.id))
-        .group_by(Campaign.status)
+        select(Campaign.status, func.count(Campaign.id)).group_by(Campaign.status)
     )
     status_counts = {row[0]: row[1] for row in status_counts_result.all()}
 
-    # Product count
+    campaigns_active = status_counts.get("active", 0)
+    campaigns_draft = status_counts.get("draft", 0)
+    campaigns_moq_reached = status_counts.get("moq_reached", 0)
+    campaigns_payment_collecting = status_counts.get("payment_collecting", 0)
+    campaigns_ordered = status_counts.get("ordered", 0)
+    campaigns_shipped = status_counts.get("shipped", 0)
+    campaigns_delivered = status_counts.get("delivered", 0)
+    campaigns_cancelled = status_counts.get("cancelled", 0)
+
+    # ── Product counts ────────────────────────────────────────────────────────
     product_count_result = await db.execute(select(func.count(Product.id)))
     product_count = int(product_count_result.scalar() or 0)
 
-    # Total demand entries (active only)
+    products_7d_result = await db.execute(
+        select(func.count(Product.id)).where(Product.created_at >= seven_days_ago)
+    )
+    products_delta_7d = int(products_7d_result.scalar() or 0)
+
+    products_30d_result = await db.execute(
+        select(func.count(Product.id)).where(Product.created_at >= thirty_days_ago)
+    )
+    products_delta_30d = int(products_30d_result.scalar() or 0)
+
+    # Campaigns created in last 7d (active only)
+    active_7d_result = await db.execute(
+        select(func.count(Campaign.id)).where(
+            Campaign.status == "active",
+            Campaign.activated_at >= seven_days_ago,
+        )
+    )
+    active_delta_7d = int(active_7d_result.scalar() or 0)
+
+    # ── Demand metrics ────────────────────────────────────────────────────────
     total_demand_result = await db.execute(
         select(func.sum(CampaignDemandEntry.quantity))
         .where(CampaignDemandEntry.status == "active")
     )
     total_demand = int(total_demand_result.scalar() or 0)
 
-    # Unique users who have left demands
     unique_users_result = await db.execute(
         select(func.count(distinct(CampaignDemandEntry.user_id)))
         .where(CampaignDemandEntry.status == "active")
     )
     unique_demand_users = int(unique_users_result.scalar() or 0)
 
-    # Last 30 days demand entries count
     demand_30d_result = await db.execute(
-        select(func.count(CampaignDemandEntry.id))
+        select(func.sum(CampaignDemandEntry.quantity))
         .where(
             CampaignDemandEntry.created_at >= thirty_days_ago,
             CampaignDemandEntry.status == "active",
@@ -86,22 +113,30 @@ async def get_dashboard_summary(
     )
     demand_last_30d = int(demand_30d_result.scalar() or 0)
 
-    # Pending suggestions
+    demand_7d_result = await db.execute(
+        select(func.sum(CampaignDemandEntry.quantity))
+        .where(
+            CampaignDemandEntry.created_at >= seven_days_ago,
+            CampaignDemandEntry.status == "active",
+        )
+    )
+    demand_last_7d = int(demand_7d_result.scalar() or 0)
+
+    avg_demand_per_user = round(total_demand / unique_demand_users, 2) if unique_demand_users > 0 else 0.0
+
+    # ── Suggestions ───────────────────────────────────────────────────────────
     pending_suggestions_result = await db.execute(
-        select(func.count(ProductSuggestion.id))
-        .where(ProductSuggestion.status == "pending")
+        select(func.count(ProductSuggestion.id)).where(ProductSuggestion.status == "pending")
     )
     pending_suggestions = int(pending_suggestions_result.scalar() or 0)
 
-    # Revenue: sum of paid payment transactions
+    # ── Finance ───────────────────────────────────────────────────────────────
     revenue_result = await db.execute(
         select(func.coalesce(func.sum(PaymentTransaction.amount_try), 0))
         .where(PaymentTransaction.status == "success")
     )
     total_revenue_try = float(revenue_result.scalar() or 0)
 
-    # Pending collection: participants invited/joined × price (estimated)
-    # Conservative approach: only count invited (moq_reached) participants with price snapshots
     pending_collection_result = await db.execute(
         select(func.coalesce(func.sum(CampaignParticipant.total_amount_try_snapshot), 0))
         .where(
@@ -111,27 +146,298 @@ async def get_dashboard_summary(
     )
     pending_collection_try = float(pending_collection_result.scalar() or 0)
 
+    # Participant counts
+    invited_count_result = await db.execute(
+        select(func.count(CampaignParticipant.id))
+        .where(CampaignParticipant.status == "invited")
+    )
+    invited_participant_count = int(invited_count_result.scalar() or 0)
+
+    paid_count_result = await db.execute(
+        select(func.count(CampaignParticipant.id))
+        .where(CampaignParticipant.status == "paid")
+    )
+    paid_participant_count = int(paid_count_result.scalar() or 0)
+
+    # Average paid order value
+    avg_order_result = await db.execute(
+        select(func.avg(PaymentTransaction.amount_try))
+        .where(PaymentTransaction.status == "success")
+    )
+    avg_paid_order_value = float(avg_order_result.scalar() or 0)
+
+    # Payment conversion rate: paid / (invited + paid)
+    conversion_denom = invited_participant_count + paid_participant_count
+    payment_conversion_rate = (
+        round(paid_participant_count / conversion_denom * 100, 1)
+        if conversion_denom > 0 else None
+    )
+
+    # ── MOQ fill % for active campaigns (for attention + lifecycle) ───────────
+    participant_qty_result = await db.execute(
+        select(
+            CampaignParticipant.campaign_id,
+            func.sum(CampaignParticipant.quantity).label("total_qty"),
+        )
+        .where(CampaignParticipant.status.in_(["joined", "invited", "paid"]))
+        .group_by(CampaignParticipant.campaign_id)
+    )
+    part_qty_map = {str(r.campaign_id): int(r.total_qty or 0) for r in participant_qty_result.all()}
+
+    active_camps_result = await db.execute(
+        select(Campaign.id, Campaign.moq, Campaign.title_override, Campaign.product_id, Campaign.payment_deadline)
+        .where(Campaign.status == "active")
+    )
+    active_camps = active_camps_result.all()
+
+    # Collect product titles needed
+    product_ids_needed = [str(c.product_id) for c in active_camps]
+    if product_ids_needed:
+        prod_title_result = await db.execute(
+            select(Product.id, Product.title).where(Product.id.in_([c.product_id for c in active_camps]))
+        )
+        prod_title_map = {str(p.id): p.title for p in prod_title_result.all()}
+    else:
+        prod_title_map = {}
+
+    near_moq_items = []  # fill_pct >= 80 active
+    for c in active_camps:
+        qty = part_qty_map.get(str(c.id), 0)
+        if c.moq and c.moq > 0:
+            pct = qty / c.moq * 100
+            if pct >= 80:
+                title = c.title_override or prod_title_map.get(str(c.product_id), str(c.id)[:8])
+                near_moq_items.append({
+                    "campaign_id": str(c.id),
+                    "title": title,
+                    "fill_pct": round(pct, 1),
+                    "current_qty": qty,
+                    "moq": c.moq,
+                })
+    near_moq_items.sort(key=lambda x: x["fill_pct"], reverse=True)
+
+    # MOQ stalled: moq_reached status, moq_reached_at > 24h ago
+    stalled_result = await db.execute(
+        select(Campaign.id, Campaign.title_override, Campaign.product_id, Campaign.moq_reached_at)
+        .where(
+            Campaign.status == "moq_reached",
+            Campaign.moq_reached_at <= now - timedelta(hours=24),
+        )
+        .order_by(Campaign.moq_reached_at.asc())
+        .limit(5)
+    )
+    stalled_rows = stalled_result.all()
+
+    # Payment collecting with deadline <= 3 days
+    urgent_payment_result = await db.execute(
+        select(Campaign.id, Campaign.title_override, Campaign.product_id, Campaign.payment_deadline)
+        .where(
+            Campaign.status == "payment_collecting",
+            Campaign.payment_deadline.isnot(None),
+            Campaign.payment_deadline <= three_days_from_now,
+        )
+        .order_by(Campaign.payment_deadline.asc())
+        .limit(5)
+    )
+    urgent_payment_rows = urgent_payment_result.all()
+
+    # Fetch product titles for stalled + urgent
+    extra_product_ids = (
+        [r.product_id for r in stalled_rows] +
+        [r.product_id for r in urgent_payment_rows]
+    )
+    if extra_product_ids:
+        extra_prod_result = await db.execute(
+            select(Product.id, Product.title).where(Product.id.in_(extra_product_ids))
+        )
+        for p in extra_prod_result.all():
+            prod_title_map[str(p.id)] = p.title
+
+    # Fraud watch: count critical+high risk entries
+    fraud_agg_result = await db.execute(
+        select(
+            CampaignDemandEntry.user_id,
+            CampaignDemandEntry.campaign_id,
+            func.sum(CampaignDemandEntry.quantity).label("user_total_qty"),
+        )
+        .group_by(CampaignDemandEntry.user_id, CampaignDemandEntry.campaign_id)
+    )
+    fraud_raw = fraud_agg_result.all()
+
+    fraud_campaign_ids = list({r.campaign_id for r in fraud_raw})
+    fraud_moq_map: dict = {}
+    if fraud_campaign_ids:
+        fraud_camp_result = await db.execute(
+            select(Campaign.id, Campaign.moq).where(Campaign.id.in_(fraud_campaign_ids))
+        )
+        fraud_moq_map = {str(c.id): c.moq for c in fraud_camp_result.all()}
+
+    fraud_critical = 0
+    fraud_high = 0
+    fraud_watch_total = 0
+    for r in fraud_raw:
+        moq = fraud_moq_map.get(str(r.campaign_id))
+        if not moq or moq <= 0:
+            continue
+        pct = int(r.user_total_qty or 0) / moq
+        if pct >= 0.30:
+            fraud_critical += 1
+            fraud_watch_total += 1
+        elif pct >= 0.20:
+            fraud_high += 1
+            fraud_watch_total += 1
+        elif pct >= 0.10:
+            fraud_watch_total += 1
+
+    # ── Build attention items ─────────────────────────────────────────────────
+    attention = []
+
+    if fraud_critical > 0:
+        attention.append({
+            "severity": "critical",
+            "title": f"{fraud_critical} kritik fraud riski",
+            "description": f"MOQ'nun %30+'unu tek başına alan {fraud_critical} kullanıcı tespit edildi",
+            "href": "/admin/fraud-watch",
+            "primaryActionLabel": "Fraud Watch",
+            "primaryActionHref": "/admin/fraud-watch",
+        })
+    elif fraud_high > 0:
+        attention.append({
+            "severity": "warning",
+            "title": f"{fraud_high} yüksek fraud riski",
+            "description": f"MOQ'nun %20+'unu alan {fraud_high} kullanıcı var",
+            "href": "/admin/fraud-watch",
+            "primaryActionLabel": "İncele",
+            "primaryActionHref": "/admin/fraud-watch",
+        })
+
+    if stalled_rows:
+        attention.append({
+            "severity": "warning",
+            "title": f"{len(stalled_rows)} kampanya ödeme aşamasına geçmedi",
+            "description": "MOQ dolmuş fakat ödeme süreci başlatılmamış",
+            "href": "/admin/products?status=moq_reached",
+            "primaryActionLabel": "Geç",
+            "primaryActionHref": "/admin/products?status=moq_reached",
+        })
+
+    if urgent_payment_rows:
+        attention.append({
+            "severity": "critical",
+            "title": f"{len(urgent_payment_rows)} kampanyanın ödeme deadline'ı yakın",
+            "description": "3 gün içinde ödeme kapanacak kampanyalar",
+            "href": "/admin/products?status=payment_collecting",
+            "primaryActionLabel": "İncele",
+            "primaryActionHref": "/admin/products?status=payment_collecting",
+        })
+
+    if near_moq_items:
+        attention.append({
+            "severity": "info",
+            "title": f"{len(near_moq_items)} kampanya MOQ'a %80+ yaklaştı",
+            "description": "Yakında ödeme sürecine geçebilir",
+            "href": "/admin/products?status=active",
+            "primaryActionLabel": "Gör",
+            "primaryActionHref": "/admin/products?status=active",
+        })
+
+    if pending_suggestions > 0:
+        attention.append({
+            "severity": "info",
+            "title": f"{pending_suggestions} bekleyen ürün isteği",
+            "description": "Kullanıcı önerileri inceleme bekliyor",
+            "href": "/admin/product-requests?status=pending",
+            "primaryActionLabel": "İncele",
+            "primaryActionHref": "/admin/product-requests?status=pending",
+        })
+
+    # ── Lifecycle array ───────────────────────────────────────────────────────
+    lifecycle = [
+        {"status": "draft", "label": "Taslak", "count": campaigns_draft, "href": "/admin/products?status=draft"},
+        {"status": "active", "label": "Aktif", "count": campaigns_active, "href": "/admin/products?status=active"},
+        {"status": "moq_reached", "label": "MOQ Doldu", "count": campaigns_moq_reached, "href": "/admin/products?status=moq_reached"},
+        {"status": "payment_collecting", "label": "Ödeme Topl.", "count": campaigns_payment_collecting, "href": "/admin/products?status=payment_collecting"},
+        {"status": "ordered", "label": "Sipariş", "count": campaigns_ordered, "href": "/admin/products?status=ordered"},
+        {"status": "shipped", "label": "Kargoda", "count": campaigns_shipped, "href": "/admin/products?status=shipped"},
+        {"status": "delivered", "label": "Teslim", "count": campaigns_delivered, "href": "/admin/products?status=delivered"},
+    ]
+
     return {
-        # Campaign funnel
+        # ── Legacy flat fields (backward compat) ──────────────────────────────
         "campaigns_total": sum(status_counts.values()),
-        "campaigns_draft": status_counts.get("draft", 0),
-        "campaigns_active": status_counts.get("active", 0),
-        "campaigns_moq_reached": status_counts.get("moq_reached", 0),
-        "campaigns_payment_collecting": status_counts.get("payment_collecting", 0),
-        "campaigns_ordered": status_counts.get("ordered", 0),
-        "campaigns_shipped": status_counts.get("shipped", 0),
-        "campaigns_delivered": status_counts.get("delivered", 0),
-        # Products
+        "campaigns_draft": campaigns_draft,
+        "campaigns_active": campaigns_active,
+        "campaigns_moq_reached": campaigns_moq_reached,
+        "campaigns_payment_collecting": campaigns_payment_collecting,
+        "campaigns_ordered": campaigns_ordered,
+        "campaigns_shipped": campaigns_shipped,
+        "campaigns_delivered": campaigns_delivered,
         "products_total": product_count,
-        # Demand
         "demand_total": total_demand,
         "demand_unique_users": unique_demand_users,
         "demand_last_30d": demand_last_30d,
-        # Suggestions
         "suggestions_pending": pending_suggestions,
-        # Financial — may be 0 if no paid transactions yet
         "revenue_total_try": total_revenue_try,
         "pending_collection_try": pending_collection_try,
+        # ── New structured fields ─────────────────────────────────────────────
+        "kpis": {
+            "total_products": {
+                "value": product_count,
+                "delta_7d": products_delta_7d,
+                "delta_30d": products_delta_30d,
+                "hint": f"Son 7 günde +{products_delta_7d}" if products_delta_7d else "Bu hafta değişiklik yok",
+                "href": "/admin/products",
+            },
+            "active_campaigns": {
+                "value": campaigns_active,
+                "delta_7d": active_delta_7d,
+                "hint": f"{near_moq_items[0]['title'][:20]}… %{near_moq_items[0]['fill_pct']} doldu" if near_moq_items else "Aktif kampanya",
+                "href": "/admin/products?status=active",
+            },
+            "moq_reached": {
+                "value": campaigns_moq_reached,
+                "delta_7d": None,
+                "hint": f"{len(stalled_rows)} bekliyor" if stalled_rows else "Ödeme bekliyor",
+                "href": "/admin/products?status=moq_reached",
+            },
+            "payment_collecting": {
+                "value": campaigns_payment_collecting,
+                "delta_7d": None,
+                "hint": f"{len(urgent_payment_rows)} deadline yakın" if urgent_payment_rows else "Ödeme toplanıyor",
+                "href": "/admin/products?status=payment_collecting",
+            },
+            "pending_suggestions": {
+                "value": pending_suggestions,
+                "delta_7d": None,
+                "hint": "İnceleme bekliyor" if pending_suggestions else "Temiz",
+                "href": "/admin/product-requests?status=pending",
+            },
+            "fraud_watch": {
+                "value": fraud_watch_total,
+                "critical": fraud_critical,
+                "high": fraud_high,
+                "hint": f"{fraud_critical} kritik" if fraud_critical > 0 else ("Temiz" if fraud_watch_total == 0 else f"{fraud_watch_total} şüpheli"),
+                "href": "/admin/fraud-watch",
+            },
+        },
+        "attention": attention,
+        "lifecycle": lifecycle,
+        "finance": {
+            "collected_amount": total_revenue_try,
+            "pending_amount": pending_collection_try,
+            "payment_conversion_rate": payment_conversion_rate,
+            "average_paid_order_value": round(avg_paid_order_value, 2) if avg_paid_order_value else None,
+            "invited_participant_count": invited_participant_count,
+            "paid_participant_count": paid_participant_count,
+        },
+        "demand": {
+            "total_quantity": total_demand,
+            "unique_users": unique_demand_users,
+            "average_per_user": avg_demand_per_user,
+            "last_30_days_quantity": demand_last_30d,
+            "last_7_days_quantity": demand_last_7d,
+        },
+        "near_moq_active": near_moq_items[:6],
     }
 
 

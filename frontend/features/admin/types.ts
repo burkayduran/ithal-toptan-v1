@@ -140,8 +140,73 @@ export interface PricePreviewPayload {
   margin_rate?: number;
 }
 
+// ── Dashboard KPI value ───────────────────────────────────────────────────────
+
+export interface KpiValue {
+  value: number;
+  delta_7d?: number | null;
+  delta_30d?: number | null;
+  hint?: string;
+  href?: string;
+  critical?: number;
+  high?: number;
+}
+
+// ── Attention item ────────────────────────────────────────────────────────────
+
+export type AttentionSeverity = "info" | "warning" | "critical";
+
+export interface AttentionItem {
+  severity: AttentionSeverity;
+  title: string;
+  description: string;
+  href: string;
+  primaryActionLabel: string;
+  primaryActionHref: string;
+}
+
+// ── Lifecycle step ────────────────────────────────────────────────────────────
+
+export interface LifecycleStep {
+  status: string;
+  label: string;
+  count: number;
+  href: string;
+}
+
+// ── Finance block ─────────────────────────────────────────────────────────────
+
+export interface FinanceBlock {
+  collected_amount: number;
+  pending_amount: number;
+  payment_conversion_rate: number | null;
+  average_paid_order_value: number | null;
+  invited_participant_count: number;
+  paid_participant_count: number;
+}
+
+// ── Demand block ──────────────────────────────────────────────────────────────
+
+export interface DemandBlock {
+  total_quantity: number;
+  unique_users: number;
+  average_per_user: number;
+  last_30_days_quantity: number;
+  last_7_days_quantity: number;
+}
+
+// ── Near MOQ item ─────────────────────────────────────────────────────────────
+
+export interface NearMoqActiveItem {
+  campaign_id: string;
+  title: string;
+  fill_pct: number;
+  current_qty: number;
+  moq: number;
+}
+
 export interface DashboardSummary {
-  // Campaign funnel
+  // Legacy flat fields (backward compat)
   campaigns_total: number;
   campaigns_draft: number;
   campaigns_active: number;
@@ -150,17 +215,27 @@ export interface DashboardSummary {
   campaigns_ordered: number;
   campaigns_shipped: number;
   campaigns_delivered: number;
-  // Products
   products_total: number;
-  // Demand
   demand_total: number;
   demand_unique_users: number;
   demand_last_30d: number;
-  // Suggestions
   suggestions_pending: number;
-  // Financial
   revenue_total_try: number;
   pending_collection_try: number;
+  // New structured fields
+  kpis?: {
+    total_products: KpiValue;
+    active_campaigns: KpiValue;
+    moq_reached: KpiValue;
+    payment_collecting: KpiValue;
+    pending_suggestions: KpiValue;
+    fraud_watch: KpiValue;
+  };
+  attention?: AttentionItem[];
+  lifecycle?: LifecycleStep[];
+  finance?: FinanceBlock;
+  demand?: DemandBlock;
+  near_moq_active?: NearMoqActiveItem[];
 }
 
 export interface DemandEntry {
